@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>原価表入力</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="原価表入力">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#1c1b19">
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --ink: #1c1b19; --sub: #6d6a64; --line: #e2ded6;
+    --acc: #b4441b; --acc-ink: #ffffff; --ok: #1f7a44; --ok-bg: #e8f4ec; --err: #b3261e; --err-bg: #fbeceb;
+    --warn-bg: #fff6e0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    font-size: 16px; -webkit-text-size-adjust: 100%; }
+  header { background: var(--ink); color: #fff; padding: calc(10px + env(safe-area-inset-top)) 14px 12px; position: sticky; top: 0; z-index: 5; }
+  .hrow { display: flex; align-items: center; gap: 8px; }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; }
+  header p { margin: 4px 0 0; font-size: 12px; opacity: .7; }
+  #store { flex: 1; min-width: 0; min-height: 40px; padding: 6px 30px 6px 10px; font-size: 16px; font-weight: 700; color: #fff; border: 1px solid #55524b; border-radius: 10px;
+    background: #3a3833 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center; }
+  .gear { min-width: 40px; min-height: 40px; border: 0; border-radius: 10px; background: transparent; color: #fff; font-size: 20px; }
+  main { padding-bottom: calc(40px + env(safe-area-inset-bottom)) !important; }
+  #setup h2 { margin: 0 0 8px; font-size: 18px; }
+  main { max-width: 520px; margin: 0 auto; padding: 14px 14px 40px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+  .hidden { display: none !important; }
+  button { font: inherit; cursor: pointer; }
+  .btn { width: 100%; min-height: 52px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-weight: 600; }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); font-size: 17px; }
+  .btn:disabled { opacity: .45; }
+  .cam { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 64px; font-size: 17px; }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  label.f { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 6px; }
+  input[type=date], input[type=text], select {
+    width: 100%; min-height: 50px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: #fff; color: var(--ink); font: inherit; font-size: 17px; -webkit-appearance: none; appearance: none; }
+  #amount { font-size: 26px; font-weight: 700; text-align: right; letter-spacing: .02em; }
+  .yen { position: relative; }
+  .yen::after { content: "円"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--sub); }
+  .yen input { padding-right: 36px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg label { flex: 1; text-align: center; padding: 12px 6px; font-size: 14px; background: #fff; }
+  .seg input { display: none; }
+  .seg input:checked + span { font-weight: 700; color: var(--acc); }
+  .seg label:has(input:checked) { background: #fbf1ec; }
+  .note { font-size: 13px; color: var(--sub); margin-top: 8px; line-height: 1.5; }
+  .msg { border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.5; margin-bottom: 12px; }
+  .msg.info { background: var(--warn-bg); }
+  .msg.err { background: var(--err-bg); color: var(--err); }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  #items { margin-top: 10px; display: grid; gap: 8px; }
+  .item { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .item img { width: 64px; height: 84px; object-fit: cover; border-radius: 8px; background: #eee; flex: none; }
+  .item .meta { flex: 1; min-width: 0; }
+  .item .ih { font-size: 13px; line-height: 1.6; margin-bottom: 4px; }
+  .item .iamt { min-height: 42px; font-size: 20px; font-weight: 700; text-align: right; }
+  .item .isub { font-size: 12px; color: var(--acc); margin-top: 4px; min-height: 0; }
+  .item .ix { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: #fff; font-size: 18px; color: var(--sub); }
+  .ichips { margin-top: 6px; gap: 6px; }
+  .ichips .chip { min-height: 32px; font-size: 13px; padding: 4px 10px; }
+  .badge { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eee; color: var(--sub); }
+  .badge.in { background: var(--ok-bg); color: var(--ok); }
+  .badge.ex { background: #fbf1ec; color: var(--acc); }
+  .sum { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); font-size: 14px; line-height: 1.6; }
+  .sum .st { font-weight: 700; }
+  .read { font-size: 14px; margin-top: 10px; line-height: 1.6; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 16px; font-weight: 700; }
+  .chip.on { border-color: var(--acc); background: #fbf1ec; color: var(--acc); }
+  .calc { font-size: 15px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
+  .calc b { font-size: 17px; }
+  .done h2 { margin: 0 0 6px; font-size: 17px; color: var(--ok); }
+  .done .big { font-size: 22px; font-weight: 700; margin: 4px 0; }
+  a.link { color: var(--acc); font-weight: 600; }
+  .spin { display: inline-block; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .8s linear infinite; vertical-align: -3px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="hrow">
+    <h1>原価表入力</h1>
+    <select id="store" aria-label="店舗"></select>
+    <button id="gearBtn" class="gear" aria-label="設定">⚙</button>
+  </div>
+  <p id="fileName">読み込み中…</p>
+</header>
+<main>
+  <div id="msg" class="msg hidden"></div>
+
+  <section id="setup" class="card hidden">
+    <h2>合言葉を入力</h2>
+    <p class="note" style="margin-top:0">管理者から聞いた合言葉を入れてください（ひらがな・カタカナどちらでもOK）。この端末に保存され、次回からは入力不要です。</p>
+    <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="合言葉">
+    <button id="tokenBtn" class="btn primary" style="margin-top:12px">保存して始める</button>
+  </section>
+
+  <div id="convertCard" class="card hidden">
+    <div id="convertText" style="line-height:1.6"></div>
+    <button id="convertBtn" class="btn primary" style="margin-top:12px">Googleスプレッドシート版を作成</button>
+  </div>
+
+  <section id="form" class="card hidden">
+    <input id="file" type="file" accept="image/*" capture="environment" class="hidden">
+    <input id="fileLib" type="file" accept="image/*" class="hidden">
+    <div class="row">
+      <button id="camBtn" class="btn primary cam" disabled>📷 撮影する</button>
+      <button id="libBtn" class="btn cam" disabled>🖼 写真から選ぶ</button>
+    </div>
+    <div id="items"></div>
+    <div id="summary" class="sum hidden"></div>
+    <div id="readResult" class="read hidden"></div>
+
+    <label class="f" for="date">日付</label>
+    <input id="date" type="date">
+
+    <label class="f" for="vendor">業者・売上</label>
+    <select id="vendor"><option value="">業者・売上を選ぶ</option></select>
+
+    <label class="f" for="amount" id="amountLabel">金額（伝票の合計どおり）</label>
+    <div class="yen"><input id="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+
+    <label class="f">入力方法</label>
+    <div class="seg">
+      <label><input type="radio" name="mode" value="add" checked><span>足す（2枚目など）</span></label>
+      <label><input type="radio" name="mode" value="overwrite"><span>上書き</span></label>
+    </div>
+
+    <div id="calc" class="calc hidden"></div>
+
+    <button id="saveBtn" class="btn primary" style="margin-top:14px" disabled>原価表に入力</button>
+    <p class="note">数式の入ったセルには書き込みません。読み取り結果は必ず伝票と見比べてから入力してください。</p>
+  </section>
+
+  <section id="done" class="card done hidden">
+    <h2>✓ 入力しました</h2>
+    <div id="doneText"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="undoBtn" class="btn">取り消す</button>
+      <button id="nextBtn" class="btn primary">次の伝票</button>
+    </div>
+    <p class="note"><a id="sheetLink" class="link" target="_blank" rel="noopener">原価表を開く</a></p>
+  </section>
+</main>
+
+<script>
+  const API_URL = 'https://script.google.com/macros/s/AKfycbxDzoCwxLPf7fJokk-A7lCEtPDuVJc-fn1EnhrgL1gdmT5vPsEnAsdZnx2fQHhecyz6eQ/exec';
+  const LS = {
+    get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} },
+    del: (k) => { try { localStorage.removeItem(k); } catch (e) {} },
+  };
+  let STORE = LS.get('store') || '';
+  let TOKEN = LS.get('token') || '';
+  const $ = (id) => document.getElementById(id);
+  const S = { status: null, items: [], sumMode: 'asis', last: null, current: null, busy: false, kind: 'buy' };
+  const pad = (n) => ('0' + n).slice(-2);
+  const fmt = (n) => Number(n || 0).toLocaleString('ja-JP');
+  const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
+  const monthOf = (s) => s ? s.slice(0, 7) : '';
+  async function api(action, body) {
+    let res;
+    try {
+      res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ token: TOKEN, action: action }, body || {})),
+      });
+    } catch (e) {
+      throw new Error('通信できませんでした。電波の良い場所でもう一度お試しください。');
+    }
+    let j;
+    try { j = await res.json(); } catch (e) { throw new Error('サーバーの応答を読み取れませんでした（' + res.status + '）'); }
+    if (!j.ok) {
+      if (/合言葉/.test(j.error || '')) showSetup(j.error);
+      throw new Error(j.error || 'エラーが発生しました');
+    }
+    return j.data;
+  }
+  const errText = (e) => (e && e.message) ? e.message : String(e);
+  const setPhotoBtns = (d) => { $('camBtn').disabled = d; $('libBtn').disabled = d; };
+
+  function showMsg(text, kind) {
+    const m = $('msg');
+    if (!text) { m.className = 'msg hidden'; return; }
+    m.className = 'msg ' + (kind || 'info');
+    m.innerHTML = text;
+  }
+  const amountVal = () => Number(String($('amount').value).replace(/[^\d]/g, '')) || 0;
+  const modeVal = () => document.querySelector('input[name=mode]:checked').value;
+  const vendorLabel = () => { const o = $('vendor').selectedOptions[0]; return o && o.value ? o.textContent : ''; };
+
+  async function loadStatus() {
+    const date = $('date').value;
+    if (!date) return;
+    $('fileName').textContent = '読み込み中…';
+    setPhotoBtns(true); $('saveBtn').disabled = true;
+    try {
+      const st = await api('status', { s: STORE, date: date });
+      S.status = Object.assign({ ym: monthOf(date) }, st);
+      if (!st.ready) {
+        $('fileName').textContent = st.month + '月のファイル：未作成';
+        $('convertCard').classList.remove('hidden');
+        $('convertText').innerHTML = st.xlsxName
+          ? '<b>' + st.month + '月</b>のGoogleスプレッドシート版がまだありません。<br>「' + st.xlsxName + '」から作成します（元のxlsxはそのまま残ります）。'
+          : '<b>' + st.base + '</b> のファイルが見つかりません。先に' + st.month + '月の原価表を作ってください。';
+        $('convertBtn').classList.toggle('hidden', !st.xlsxName);
+        fillVendors([]);
+        return;
+      }
+      $('convertCard').classList.add('hidden');
+      $('fileName').textContent = st.fileName + '（読み取り：' + (st.readLocked ? '停止中' : st.engine) + '）';
+      fillVendors(st.vendors);
+      setPhotoBtns(false);
+      await refreshCurrent();
+    } catch (e) {
+      showMsg('読み込みに失敗しました：' + errText(e), 'err');
+    }
+  }
+
+  function fillVendors(list) {
+    const keep = vendorLabel();
+    const sel = $('vendor');
+    sel.innerHTML = '<option value="">業者・売上を選ぶ</option>';
+    const groups = {};
+    list.forEach((v) => {
+      const g = v.sec === '売上' ? '売上（手入力）' : '仕入れ';
+      if (!groups[g]) { groups[g] = document.createElement('optgroup'); groups[g].label = g; sel.appendChild(groups[g]); }
+      const o = document.createElement('option');
+      o.value = v.col; o.textContent = v.label; o.dataset.sec = v.sec || '';
+      if (v.label === keep) o.selected = true;
+      groups[g].appendChild(o);
+    });
+    applyKind();
+  }
+
+  // 売上（総売上など）を選んだときは「上書き」にして、見出しを変える
+  function applyKind() {
+    const o = $('vendor').selectedOptions[0];
+    const kind = o && o.dataset.sec === '売上' ? 'sales' : 'buy';
+    $('amountLabel').textContent = kind === 'sales' ? (o.textContent + '（その日の合計を手入力）') : '金額（伝票の合計どおり）';
+    if (kind !== S.kind) {
+      document.querySelector('input[name=mode][value=' + (kind === 'sales' ? 'overwrite' : 'add') + ']').checked = true;
+      S.kind = kind;
+    }
+  }
+
+  function selectVendorByLabel(label) {
+    if (!label) return false;
+    for (const o of $('vendor').options) { if (o.textContent === label) { o.selected = true; return true; } }
+    return false;
+  }
+
+  async function refreshCurrent() {
+    S.current = null;
+    updateCalc();
+    const col = $('vendor').value;
+    if (!S.status || !S.status.ready || !col) return;
+    try {
+      S.current = await api('current', { s: STORE, date: $('date').value, col: Number(col) });
+    } catch (e) {
+      showMsg(errText(e), 'err');
+    }
+    updateCalc();
+  }
+
+  function updateCalc() {
+    const box = $('calc');
+    const ready = S.status && S.status.ready;
+    const amt = amountVal();
+    const ok = ready && $('vendor').value && amt > 0 && S.current !== null;
+    $('saveBtn').disabled = !ok || S.busy;
+    if (!ready || !$('vendor').value || S.current === null) { box.classList.add('hidden'); return; }
+    const d = $('date').value.split('-');
+    const after = modeVal() === 'overwrite' ? amt : S.current + amt;
+    box.classList.remove('hidden');
+    box.innerHTML = Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>';
+  }
+
+  function resizeImage(file, max) {
+    return new Promise((res, rej) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        res(c.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('画像を開けませんでした')); };
+      img.src = url;
+    });
+  }
+
+  // ===== 伝票の写真（複数枚まとめて） =====
+  const esc = (t) => String(t == null ? '' : t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  /** その写真の税込金額（税抜の伝票なら、伝票の金額に同じ割合を掛ける） */
+  function itemIncl(it) {
+    const r = it.r || {};
+    if (r.tax !== '税抜') return { value: it.amount || 0, excl: false, approx: false };
+    const opts = (r.inclTax || []).filter((x) => x && x.value > 0);
+    if (!opts.length || !r.total) return { value: it.amount || 0, excl: true, approx: true };
+    const v = it.amount === r.total ? opts[0].value : Math.floor((it.amount || 0) * opts[0].value / r.total + 1e-9);
+    return { value: v, excl: true, approx: opts.length > 1, label: opts[0].label };
+  }
+
+  function renderItems() {
+    const box = $('items');
+    box.innerHTML = '';
+    S.items.forEach((it, idx) => {
+      const r = it.r || {};
+      let head = '<b>' + (idx + 1) + '枚目</b>';
+      if (it.state === 'reading') head += '　<span class="spin"></span>読み取り中…';
+      else if (it.state === 'error') head += '　<span style="color:var(--err)">読み取れませんでした（手入力）</span>';
+      else if (it.state === 'locked') head += '　<span style="color:var(--sub)">読み取り停止中（手入力）</span>';
+      else {
+        head += '　' + (r.vendor ? esc(r.vendor) : '業者不明');
+        if (r.tax && r.tax !== '不明') head += ' <span class="badge ' + (r.tax === '税込' ? 'in' : 'ex') + '">' + r.tax + '</span>';
+        else head += ' <span class="badge">税区分不明</span>';
+      }
+      const inc = itemIncl(it);
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML =
+        '<img src="' + it.photo + '" alt="' + (idx + 1) + '枚目の伝票">' +
+        '<div class="meta"><div class="ih">' + head + '</div>' +
+        '<div class="yen"><input class="iamt" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (it.amount ? fmt(it.amount) : '') + '"></div>' +
+        '<div class="isub">' + (inc.excl && it.amount ? '税込 ' + fmt(inc.value) + '円' + (inc.label ? '（' + esc(inc.label) + '）' : '') : '') + '</div>' +
+        '</div><button type="button" class="ix" aria-label="この写真を外す">×</button>';
+      const input = row.querySelector('.iamt');
+      input.addEventListener('input', () => {
+        it.amount = Number(String(input.value).replace(/[^\d]/g, '')) || 0;
+        input.value = it.amount ? fmt(it.amount) : '';
+        const x = itemIncl(it);
+        row.querySelector('.isub').textContent = x.excl && it.amount ? '税込 ' + fmt(x.value) + '円' + (x.label ? '（' + x.label + '）' : '') : '';
+        recalc();
+      });
+      row.querySelector('.ix').addEventListener('click', () => {
+        S.items.splice(S.items.indexOf(it), 1);
+        renderItems();
+        recalc();
+      });
+      const seen = {};
+      const c = (r.candidates || [])
+        .map((x) => (typeof x === 'number' ? { label: '', value: x } : x))
+        .filter((x) => x && x.value > 0)
+        .sort((a, b) => (/合計|請求/.test(b.label) ? 1 : 0) - (/合計|請求/.test(a.label) ? 1 : 0))
+        .filter((x) => (seen[x.value] ? false : (seen[x.value] = true)));
+      if (it.state === 'done' && c.length > 1) {
+        const chips = document.createElement('div');
+        chips.className = 'chips ichips';
+        c.forEach((x) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'chip' + (x.value === it.amount ? ' on' : '');
+          b.textContent = (x.label ? x.label + ' ' : '') + fmt(x.value);
+          b.addEventListener('click', () => { it.amount = x.value; renderItems(); recalc(); });
+          chips.appendChild(b);
+        });
+        row.querySelector('.meta').appendChild(chips);
+      }
+      box.appendChild(row);
+    });
+    const many = S.items.length > 0;
+    $('camBtn').textContent = many ? '📷 もう1枚撮る' : '📷 撮影する';
+    $('libBtn').textContent = many ? '🖼 もう1枚選ぶ' : '🖼 写真から選ぶ';
+  }
+
+  /** 何枚かの伝票の合計と税込合計を出して、金額欄に入れる */
+  function recalc() {
+    const box = $('summary');
+    if (!S.items.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const sum = S.items.reduce((a, i) => a + (i.amount || 0), 0);
+    let incl = 0, anyExcl = false, approx = false, anyUnknown = false;
+    S.items.forEach((i) => {
+      const x = itemIncl(i);
+      incl += x.value;
+      if (x.excl) anyExcl = true;
+      if (x.approx) approx = true;
+      if (i.state === 'done' && i.r && i.r.tax === '不明') anyUnknown = true;
+    });
+    const vendors = [...new Set(S.items.map((i) => i.r && i.r.vendor).filter(Boolean))];
+    if (!(anyExcl && incl !== sum)) S.sumMode = 'asis';
+    box.classList.remove('hidden');
+    box.innerHTML = '<div class="st">' + S.items.length + '枚の合計</div>';
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    const opts = [{ mode: 'asis', text: '伝票どおりの合計 ' + fmt(sum) + '円', value: sum }];
+    if (anyExcl && incl !== sum) opts.push({ mode: 'incl', text: '税込合計 ' + fmt(incl) + '円', value: incl });
+    opts.forEach((o) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip' + (S.sumMode === o.mode ? ' on' : '');
+      b.textContent = o.text;
+      b.addEventListener('click', () => { S.sumMode = o.mode; recalc(); });
+      chips.appendChild(b);
+    });
+    box.appendChild(chips);
+    const notes = [];
+    if (anyExcl) notes.push('税抜の伝票は、税込にした金額で税込合計を出しています。');
+    if (approx) notes.push('税率が分からない伝票は8%で計算しています。');
+    if (anyUnknown) notes.push('税区分が分からない伝票は、そのままの金額で計算しています。');
+    if (vendors.length > 1) notes.push('<span style="color:var(--err)">ほかの業者の伝票が混ざっています（' + vendors.map(esc).join('・') + '）。</span>');
+    if (notes.length) box.insertAdjacentHTML('beforeend', '<div class="note" style="margin-top:6px">' + notes.join('<br>') + '</div>');
+    const chosen = opts.find((o) => o.mode === S.sumMode) || opts[0];
+    if (S.kind !== 'sales') {
+      const n = S.items.length;
+      $('amountLabel').textContent = chosen.mode === 'incl' ? '金額（' + n + '枚の税込合計）' : (n > 1 ? '金額（' + n + '枚の合計）' : '金額（伝票の合計どおり）');
+    }
+    $('amount').value = chosen.value ? fmt(chosen.value) : '';
+    updateCalc();
+  }
+
+  async function onPhoto(file) {
+    if (!file) return;
+    showMsg('');
+    let photo;
+    try {
+      photo = await resizeImage(file, S.status && S.status.engine === 'Claude' ? 1600 : 2400);
+    } catch (e) { showMsg(errText(e), 'err'); return; }
+    const it = { photo: photo, state: 'reading', r: null, amount: 0 };
+    const first = S.items.length === 0;
+    S.items.push(it);
+    if (S.status && S.status.readLocked) {
+      it.state = 'locked';
+      renderItems(); recalc();
+      await refreshCurrent();
+      return;
+    }
+    renderItems();
+    setPhotoBtns(true);
+    const rr = $('readResult');
+    try {
+      const labels = (S.status.vendors || []).filter((v) => v.sec !== '売上').map((v) => v.label);
+      const r = await api('read', { s: STORE, photo: photo, labels: labels });
+      it.r = r; it.state = 'done'; it.amount = r.total || 0;
+      if (first || !$('vendor').value) { selectVendorByLabel(r.vendor); applyKind(); }
+      if (first) {
+        let dateNote = '';
+        if (r.date && r.date !== $('date').value) {
+          const diff = (new Date() - new Date(r.date + 'T00:00:00')) / 86400000;
+          if (diff >= -1 && diff <= 45) {
+            $('date').value = r.date;
+            dateNote = '（伝票の日付に合わせました）';
+            if (monthOf(r.date) !== S.status.ym) { await loadStatus(); selectVendorByLabel(r.vendor); applyKind(); }
+          } else {
+            dateNote = '（今日の日付のままです）';
+          }
+        }
+        rr.classList.remove('hidden');
+        rr.innerHTML = '読み取り：' + esc(r.engine) + (r.date ? '　伝票の日付 ' + esc(r.date) + ' ' + dateNote : '') +
+          (r.taxNote ? '<br><span style="color:var(--sub)">税区分の判断：' + esc(r.taxNote) + '</span>' : '') +
+          '<br><span style="color:var(--sub)">同じ伝票が何枚かあるときは「もう1枚」で追加できます。金額が違う写真は、その欄を直してください。</span>';
+      }
+    } catch (e) {
+      it.state = 'error';
+      showMsg('読み取りに失敗しました：' + errText(e) + '<br>その写真の金額は手で入力できます。', 'err');
+    } finally {
+      setPhotoBtns(false);
+      renderItems(); recalc();
+      await refreshCurrent();
+    }
+  }
+
+  async function save() {
+    const amt = amountVal();
+    if (!amt || !$('vendor').value) return;
+    S.busy = true; updateCalc();
+    $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
+    try {
+      const r = await api('save', { req: {
+        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: modeVal(), photos: S.items.map((i) => i.photo),
+      } });
+      S.last = r;
+      const d = r.date.split('-');
+      $('doneText').innerHTML =
+        '<div class="big">' + Number(d[1]) + '/' + Number(d[2]) + '　' + r.label + '</div>' +
+        '<div>' + fmt(r.before) + '円 → <b>' + fmt(r.after) + '円</b>（セル ' + r.a1 + '）</div>';
+      $('sheetLink').href = r.sheetUrl;
+      $('undoBtn').disabled = false; $('undoBtn').textContent = '取り消す';
+      $('form').classList.add('hidden'); $('done').classList.remove('hidden');
+      showMsg('');
+      window.scrollTo(0, 0);
+    } catch (e) {
+      showMsg('入力できませんでした：' + errText(e), 'err');
+    } finally {
+      S.busy = false;
+      $('saveBtn').textContent = '原価表に入力';
+      updateCalc();
+    }
+  }
+
+  async function undo() {
+    if (!S.last) return;
+    $('undoBtn').disabled = true;
+    try {
+      const v = await api('undo', { res: S.last });
+      showMsg('取り消しました（' + S.last.label + '：' + fmt(v) + '円に戻しました）', 'ok');
+      S.last = null;
+      $('undoBtn').textContent = '取り消し済み';
+    } catch (e) {
+      showMsg('取り消せませんでした：' + errText(e), 'err');
+      $('undoBtn').disabled = false;
+    }
+  }
+
+  function next() {
+    S.items = []; S.sumMode = 'asis';
+    $('file').value = ''; $('fileLib').value = ''; $('amount').value = ''; $('vendor').value = ''; applyKind();
+    renderItems(); recalc(); $('readResult').classList.add('hidden');
+    document.querySelector('input[name=mode][value=add]').checked = true;
+    $('done').classList.add('hidden'); $('form').classList.remove('hidden');
+    refreshCurrent();
+    window.scrollTo(0, 0);
+  }
+
+  $('camBtn').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; onPhoto(f); });
+  $('libBtn').addEventListener('click', () => $('fileLib').click());
+  $('fileLib').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; onPhoto(f); });
+  $('date').addEventListener('change', () => {
+    if (!S.status || monthOf($('date').value) !== S.status.ym) loadStatus(); else refreshCurrent();
+  });
+  $('vendor').addEventListener('change', () => { applyKind(); refreshCurrent(); });
+  $('amount').addEventListener('input', () => {
+    const n = amountVal();
+    $('amount').value = n ? fmt(n) : '';
+    updateCalc();
+  });
+  document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', updateCalc));
+  $('saveBtn').addEventListener('click', save);
+  $('undoBtn').addEventListener('click', undo);
+  $('nextBtn').addEventListener('click', next);
+  let convertArmed = 0;
+  $('convertBtn').addEventListener('click', async () => {
+    if (Date.now() - convertArmed > 5000) {
+      convertArmed = Date.now();
+      $('convertBtn').textContent = 'もう一度タップで作成します';
+      setTimeout(() => { if (convertArmed && Date.now() - convertArmed >= 5000) $('convertBtn').textContent = 'Googleスプレッドシート版を作成'; }, 5100);
+      return;
+    }
+    convertArmed = 0;
+    $('convertBtn').disabled = true;
+    $('convertBtn').innerHTML = '<span class="spin"></span>作成中…（数十秒かかります）';
+    try {
+      await api('convert', { s: STORE, date: $('date').value });
+      showMsg('Googleスプレッドシート版を作成しました。', 'ok');
+      await loadStatus();
+    } catch (e) {
+      showMsg('作成できませんでした：' + errText(e), 'err');
+    } finally {
+      $('convertBtn').disabled = false;
+      $('convertBtn').textContent = 'Googleスプレッドシート版を作成';
+    }
+  });
+
+  function showSetup(err) {
+    $('setup').classList.remove('hidden');
+    $('form').classList.add('hidden'); $('done').classList.add('hidden'); $('convertCard').classList.add('hidden');
+    $('fileName').textContent = '合言葉の入力が必要です';
+    $('tokenInput').value = TOKEN;
+    if (err) showMsg(err, 'err');
+  }
+
+  async function start() {
+    if (!TOKEN) { showSetup(); return; }
+    try {
+      const stores = await api('stores');
+      const sel = $('store');
+      sel.innerHTML = '';
+      stores.forEach((x) => {
+        const o = document.createElement('option');
+        o.value = x.code; o.textContent = x.name;
+        sel.appendChild(o);
+      });
+      if (!stores.some((x) => x.code === STORE)) STORE = stores.length ? stores[0].code : '';
+      sel.value = STORE;
+      sel.disabled = stores.length <= 1;
+      LS.set('store', STORE);
+      $('setup').classList.add('hidden');
+      $('form').classList.remove('hidden');
+      showMsg('');
+      await loadStatus();
+    } catch (e) {
+      if (!/合言葉/.test(errText(e))) showMsg(errText(e), 'err');
+    }
+  }
+
+  $('tokenBtn').addEventListener('click', () => {
+    const t = $('tokenInput').value.trim().toLowerCase();
+    if (!t) return;
+    TOKEN = t; LS.set('token', t);
+    start();
+  });
+  $('gearBtn').addEventListener('click', () => {
+    if ($('setup').classList.contains('hidden')) showSetup(); else start();
+  });
+  $('store').addEventListener('change', () => {
+    STORE = $('store').value; LS.set('store', STORE);
+    if (!$('done').classList.contains('hidden')) next();
+    S.status = null;
+    fillVendors([]);
+    loadStatus();
+  });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+
+  $('date').value = todayStr();
+  start();
+</script>
+</body>
+</html>
