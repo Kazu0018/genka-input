@@ -62,6 +62,8 @@
   #items { margin-top: 10px; display: grid; gap: 8px; }
   .item { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
   .item img { width: 64px; height: 84px; object-fit: cover; border-radius: 8px; background: #eee; flex: none; }
+  .item .mtag { width: 64px; flex: none; padding: 12px 0; border-radius: 8px; background: var(--bg); color: var(--sub); font-size: 12px; font-weight: 700; text-align: center; }
+  .linkbtn { width: 100%; min-height: 46px; margin-top: 10px; border: 1px dashed var(--acc); border-radius: 12px; background: #fff; color: var(--acc); font-size: 15px; font-weight: 700; }
   .item .meta { flex: 1; min-width: 0; }
   .item .ih { font-size: 13px; line-height: 1.6; margin-bottom: 4px; }
   .item .iamt { min-height: 42px; font-size: 20px; font-weight: 700; text-align: right; }
@@ -120,8 +122,6 @@
       <button id="camBtn" class="btn primary cam" disabled>📷 撮影する</button>
       <button id="libBtn" class="btn cam" disabled>🖼 写真から選ぶ</button>
     </div>
-    <div id="items"></div>
-    <div id="summary" class="sum hidden"></div>
     <div id="readResult" class="read hidden"></div>
 
     <label class="f" for="date">日付</label>
@@ -129,6 +129,10 @@
 
     <label class="f" for="vendor">業者・売上</label>
     <select id="vendor"><option value="">業者・売上を選ぶ</option></select>
+
+    <div id="items"></div>
+    <div id="summary" class="sum hidden"></div>
+    <button type="button" id="manBtn" class="linkbtn">＋ 伝票が何枚かある：1枚ずつ金額を入れて合計</button>
 
     <label class="f" for="amount" id="amountLabel">金額（伝票の合計どおり）</label>
     <div class="yen"><input id="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
@@ -291,6 +295,7 @@
     const sales = S.kind === 'sales';
     if (sales) S.plus8 = false;
     $('p8Row').classList.toggle('hidden', sales);
+    $('manBtn').classList.toggle('hidden', sales);
     $('p8Btn').className = 'chip' + (S.plus8 ? ' on' : '');
     $('p8Btn').setAttribute('aria-pressed', S.plus8 ? 'true' : 'false');
     $('p8Btn').textContent = S.plus8 ? '＋8% オン' : '＋8%';
@@ -351,6 +356,7 @@
       if (it.state === 'reading') head += '　<span class="spin"></span>読み取り中…';
       else if (it.state === 'error') head += '　<span style="color:var(--err)">読み取れませんでした（手入力）</span>';
       else if (it.state === 'locked') head += '　<span style="color:var(--sub)">読み取り停止中（手入力）</span>';
+      else if (it.state === 'manual') head += '　<span style="color:var(--sub)">手入力</span>';
       else {
         head += '　' + (r.vendor ? esc(r.vendor) : '業者不明');
         if (r.tax && r.tax !== '不明') head += ' <span class="badge ' + (r.tax === '税込' ? 'in' : 'ex') + '">' + r.tax + '</span>';
@@ -360,7 +366,7 @@
       const row = document.createElement('div');
       row.className = 'item';
       row.innerHTML =
-        '<img src="' + it.photo + '" alt="' + (idx + 1) + '枚目の伝票">' +
+        (it.photo ? '<img src="' + it.photo + '" alt="' + (idx + 1) + '枚目の伝票">' : '<div class="mtag">写真なし</div>') +
         '<div class="meta"><div class="ih">' + head + '</div>' +
         '<div class="yen"><input class="iamt" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="' + (it.amount ? fmt(it.amount) : '') + '"></div>' +
         '<div class="isub">' + (inc.excl && it.amount ? '税込 ' + fmt(inc.value) + '円' + (inc.label ? '（' + esc(inc.label) + '）' : '') : '') + '</div>' +
@@ -399,7 +405,8 @@
       }
       box.appendChild(row);
     });
-    const many = S.items.length > 0;
+    const many = S.items.some((i) => i.photo);
+    $('manBtn').textContent = S.items.length ? '＋ もう1枚（金額を手入力）' : '＋ 伝票が何枚かある：1枚ずつ金額を入れて合計';
     $('camBtn').textContent = many ? '📷 もう1枚撮る' : '📷 撮影する';
     $('libBtn').textContent = many ? '🖼 もう1枚選ぶ' : '🖼 写真から選ぶ';
   }
@@ -507,7 +514,7 @@
     $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
     try {
       const r = await api('save', { req: {
-        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: modeVal(), photos: S.items.map((i) => i.photo),
+        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: modeVal(), photos: S.items.map((i) => i.photo).filter(Boolean),
       } });
       S.last = r;
       const d = r.date.split('-');
@@ -566,6 +573,20 @@
     updateCalc();
   });
   document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', updateCalc));
+  /** 写真なしの伝票を1枚ぶん足す（最初は、金額欄に入っている金額を1枚目にする） */
+  function addManual() {
+    const blank = () => ({ photo: null, state: 'manual', r: null, amount: 0 });
+    if (!S.items.length) {
+      const a = amountVal();
+      S.items.push(Object.assign(blank(), { amount: a > 0 ? a : 0 }));
+      S.items.push(blank());
+    } else S.items.push(blank());
+    renderItems(); recalc();
+    const ins = [...document.querySelectorAll('#items .iamt')];
+    const t = ins.find((x) => !x.value) || ins[ins.length - 1];
+    if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+  $('manBtn').addEventListener('click', addManual);
   $('p8Btn').addEventListener('click', () => {
     S.plus8 = !S.plus8;
     if (S.plus8 && S.sumMode === 'incl') { S.sumMode = 'asis'; recalc(); } else updateCalc();
