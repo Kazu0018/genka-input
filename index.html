@@ -78,6 +78,8 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .chip { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 16px; font-weight: 700; }
   .chip.on { border-color: var(--acc); background: #fbf1ec; color: var(--acc); }
+  .p8row { align-items: center; }
+  .p8info { font-size: 15px; font-weight: 700; color: var(--acc); }
   .calc { font-size: 15px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
   .calc b { font-size: 17px; }
   .done h2 { margin: 0 0 6px; font-size: 17px; color: var(--ok); }
@@ -130,6 +132,10 @@
 
     <label class="f" for="amount" id="amountLabel">金額（伝票の合計どおり）</label>
     <div class="yen"><input id="amount" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+    <div id="p8Row" class="chips p8row">
+      <button type="button" id="p8Btn" class="chip" aria-pressed="false">＋8%</button>
+      <span id="p8Info" class="p8info"></span>
+    </div>
 
     <label class="f">入力方法</label>
     <div class="seg">
@@ -164,7 +170,7 @@
   let STORE = LS.get('store') || '';
   let TOKEN = LS.get('token') || '';
   const $ = (id) => document.getElementById(id);
-  const S = { status: null, items: [], sumMode: 'asis', last: null, current: null, busy: false, kind: 'buy' };
+  const S = { status: null, items: [], sumMode: 'asis', last: null, current: null, busy: false, kind: 'buy', plus8: false };
   const pad = (n) => ('0' + n).slice(-2);
   const fmt = (n) => Number(n || 0).toLocaleString('ja-JP');
   const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
@@ -275,17 +281,35 @@
     updateCalc();
   }
 
+  /** 原価表に入れる金額（「＋8%」がオンなら 金額×1.08、1円未満切り捨て） */
+  function finalAmount() {
+    const a = amountVal();
+    return S.plus8 && S.kind !== 'sales' ? Math.floor(a * 108 / 100) : a;
+  }
+
+  function updateP8() {
+    const sales = S.kind === 'sales';
+    if (sales) S.plus8 = false;
+    $('p8Row').classList.toggle('hidden', sales);
+    $('p8Btn').className = 'chip' + (S.plus8 ? ' on' : '');
+    $('p8Btn').setAttribute('aria-pressed', S.plus8 ? 'true' : 'false');
+    $('p8Btn').textContent = S.plus8 ? '＋8% オン' : '＋8%';
+    const a = amountVal();
+    $('p8Info').textContent = S.plus8 ? (a ? '8%を足して ' + fmt(finalAmount()) + '円 で入力' : '金額に8%を足して入力します') : '';
+  }
+
   function updateCalc() {
+    updateP8();
     const box = $('calc');
     const ready = S.status && S.status.ready;
-    const amt = amountVal();
+    const amt = finalAmount();
     const ok = ready && $('vendor').value && amt > 0 && S.current !== null;
     $('saveBtn').disabled = !ok || S.busy;
     if (!ready || !$('vendor').value || S.current === null) { box.classList.add('hidden'); return; }
     const d = $('date').value.split('-');
     const after = modeVal() === 'overwrite' ? amt : S.current + amt;
     box.classList.remove('hidden');
-    box.innerHTML = Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>';
+    box.innerHTML = Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>' + (S.plus8 ? '（8%込み）' : '');
   }
 
   function resizeImage(file, max) {
@@ -406,7 +430,7 @@
       b.type = 'button';
       b.className = 'chip' + (S.sumMode === o.mode ? ' on' : '');
       b.textContent = o.text;
-      b.addEventListener('click', () => { S.sumMode = o.mode; recalc(); });
+      b.addEventListener('click', () => { S.sumMode = o.mode; if (o.mode === 'incl') S.plus8 = false; recalc(); });
       chips.appendChild(b);
     });
     box.appendChild(chips);
@@ -477,7 +501,7 @@
   }
 
   async function save() {
-    const amt = amountVal();
+    const amt = finalAmount();
     if (!amt || !$('vendor').value) return;
     S.busy = true; updateCalc();
     $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
@@ -519,7 +543,7 @@
   }
 
   function next() {
-    S.items = []; S.sumMode = 'asis';
+    S.items = []; S.sumMode = 'asis'; S.plus8 = false;
     $('file').value = ''; $('fileLib').value = ''; $('amount').value = ''; $('vendor').value = ''; applyKind();
     renderItems(); recalc(); $('readResult').classList.add('hidden');
     document.querySelector('input[name=mode][value=add]').checked = true;
@@ -542,6 +566,10 @@
     updateCalc();
   });
   document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', updateCalc));
+  $('p8Btn').addEventListener('click', () => {
+    S.plus8 = !S.plus8;
+    if (S.plus8 && S.sumMode === 'incl') { S.sumMode = 'asis'; recalc(); } else updateCalc();
+  });
   $('saveBtn').addEventListener('click', save);
   $('undoBtn').addEventListener('click', undo);
   $('nextBtn').addEventListener('click', next);
