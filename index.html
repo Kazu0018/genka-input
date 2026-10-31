@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>原価表入力</title>
+<title>Poco a Poco原価表</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="原価表入力">
+<meta name="apple-mobile-web-app-title" content="Poco a Poco原価表">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#1c1b19">
 <style>
@@ -24,7 +24,8 @@
     font-size: 16px; -webkit-text-size-adjust: 100%; }
   header { background: var(--ink); color: #fff; padding: calc(10px + env(safe-area-inset-top)) 14px 12px; position: sticky; top: 0; z-index: 5; }
   .hrow { display: flex; align-items: center; gap: 8px; }
-  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; line-height: 1.15; }
+  header h1 small { display: block; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 600; font-size: 12px; letter-spacing: .02em; color: #f2c25b; }
   header p { margin: 4px 0 0; font-size: 12px; opacity: .7; }
   #store { flex: 1; min-width: 0; min-height: 40px; padding: 6px 30px 6px 10px; font-size: 16px; font-weight: 700; color: #fff; border: 1px solid #55524b; border-radius: 10px;
     background: #3a3833 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23fff' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center; }
@@ -95,7 +96,7 @@
 <body>
 <header>
   <div class="hrow">
-    <h1>原価表入力</h1>
+    <h1><small>Poco a Poco</small>原価表</h1>
     <select id="store" aria-label="店舗"></select>
     <button id="gearBtn" class="gear" aria-label="設定">⚙</button>
   </div>
