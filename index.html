@@ -341,9 +341,11 @@
         const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement('canvas');
         c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        const g = c.getContext('2d');
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(img, 0, 0, c.width, c.height);
         URL.revokeObjectURL(url);
-        res(c.toDataURL('image/jpeg', 0.85));
+        res(c.toDataURL('image/jpeg', 0.92));
       };
       img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('画像を開けませんでした')); };
       img.src = url;
@@ -477,7 +479,8 @@
     showMsg('');
     let photo;
     try {
-      photo = await resizeImage(file, S.status && S.status.engine === 'Claude' ? 1600 : 2400);
+      // 読み取りのAIは長い辺2576pxまでそのまま読めるので、そこまで細かく送る
+      photo = await resizeImage(file, S.status && S.status.engine === 'Claude' ? 2576 : 2400);
     } catch (e) { showMsg(errText(e), 'err'); return; }
     const it = { photo: photo, state: 'reading', r: null, amount: 0 };
     const first = S.items.length === 0;
