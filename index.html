@@ -227,8 +227,11 @@
         $('convertCard').classList.remove('hidden');
         $('convertText').innerHTML = st.xlsxName
           ? '<b>' + st.month + '月</b>のGoogleスプレッドシート版がまだありません。<br>「' + st.xlsxName + '」から作成します（元のxlsxはそのまま残ります）。'
-          : '<b>' + st.base + '</b> のファイルが見つかりません。先に' + st.month + '月の原価表を作ってください。';
-        $('convertBtn').classList.toggle('hidden', !st.xlsxName);
+          : st.fromPrev
+            ? '<b>' + st.month + '月</b>の原価表がまだありません。<br><b>' + st.fromPrev + '月</b>の原価表をもとに作ります（金額の欄は空にして、共有している人もそのまま引き継ぎます）。'
+            : '<b>' + st.base + '</b> のファイルが見つかりません。先に' + st.month + '月の原価表を作ってください。';
+        $('convertBtn').textContent = convLabel();
+        $('convertBtn').classList.toggle('hidden', !st.xlsxName && !st.fromPrev);
         fillVendors([]);
         return;
       }
@@ -622,11 +625,15 @@
   $('undoBtn').addEventListener('click', undo);
   $('nextBtn').addEventListener('click', next);
   let convertArmed = 0;
+  function convLabel() {
+    const st = S.status || {};
+    return st.fromPrev && !st.xlsxName ? st.month + '月の原価表を作成' : 'Googleスプレッドシート版を作成';
+  }
   $('convertBtn').addEventListener('click', async () => {
     if (Date.now() - convertArmed > 5000) {
       convertArmed = Date.now();
       $('convertBtn').textContent = 'もう一度タップで作成します';
-      setTimeout(() => { if (convertArmed && Date.now() - convertArmed >= 5000) $('convertBtn').textContent = 'Googleスプレッドシート版を作成'; }, 5100);
+      setTimeout(() => { if (convertArmed && Date.now() - convertArmed >= 5000) $('convertBtn').textContent = convLabel(); }, 5100);
       return;
     }
     convertArmed = 0;
@@ -634,13 +641,14 @@
     $('convertBtn').innerHTML = '<span class="spin"></span>作成中…（数十秒かかります）';
     try {
       await api('convert', { s: STORE, date: $('date').value });
-      showMsg('Googleスプレッドシート版を作成しました。', 'ok');
+      const st0 = S.status || {};
+      showMsg(st0.fromPrev && !st0.xlsxName ? st0.month + '月の原価表を作成しました（' + st0.fromPrev + '月をもとに）。' : 'Googleスプレッドシート版を作成しました。', 'ok');
       await loadStatus();
     } catch (e) {
       showMsg('作成できませんでした：' + errText(e), 'err');
     } finally {
       $('convertBtn').disabled = false;
-      $('convertBtn').textContent = 'Googleスプレッドシート版を作成';
+      $('convertBtn').textContent = convLabel();
     }
   });
 
