@@ -64,6 +64,7 @@
   .item img { width: 64px; height: 84px; object-fit: cover; border-radius: 8px; background: #eee; flex: none; }
   .item .mtag { width: 64px; flex: none; padding: 12px 0; border-radius: 8px; background: var(--bg); color: var(--sub); font-size: 12px; font-weight: 700; text-align: center; }
   .linkbtn { width: 100%; min-height: 46px; margin-top: 10px; border: 1px dashed var(--acc); border-radius: 12px; background: #fff; color: var(--acc); font-size: 15px; font-weight: 700; }
+  .linkbtn.clr { margin-top: 18px; border-color: var(--err); color: var(--err); }
   .item .meta { flex: 1; min-width: 0; }
   .item .ih { font-size: 13px; line-height: 1.6; margin-bottom: 4px; }
   .item .iamt { min-height: 42px; font-size: 20px; font-weight: 700; text-align: right; }
@@ -151,10 +152,11 @@
 
     <button id="saveBtn" class="btn primary" style="margin-top:14px" disabled>原価表に入力</button>
     <p class="note">数式の入ったセルには書き込みません。読み取り結果は必ず伝票と見比べてから入力してください。</p>
+    <button type="button" id="clrBtn" class="linkbtn clr hidden"></button>
   </section>
 
   <section id="done" class="card done hidden">
-    <h2>✓ 入力しました</h2>
+    <h2 id="doneTitle">✓ 入力しました</h2>
     <div id="doneText"></div>
     <div class="row" style="margin-top:12px">
       <button id="undoBtn" class="btn">取り消す</button>
@@ -303,8 +305,21 @@
     $('p8Info').textContent = S.plus8 ? (a ? '8%を足して ' + fmt(finalAmount()) + '円 で入力' : '金額に8%を足して入力します') : '';
   }
 
+  // 間違えて原価表に入れた金額を消す（2回押しで実行。消したあとも「取り消す」で戻せる）
+  let clrArmed = 0;
+  function updateClr() {
+    const b = $('clrBtn');
+    const ok = !!(S.status && S.status.ready && $('vendor').value && S.current > 0 && !S.busy);
+    b.classList.toggle('hidden', !ok);
+    if (!ok) { clrArmed = 0; return; }
+    const d = $('date').value.split('-');
+    const what = Number(d[1]) + '/' + Number(d[2]) + ' ' + vendorLabel() + 'の ' + fmt(S.current) + '円';
+    b.textContent = Date.now() - clrArmed < 5000 ? 'もう一度押すと ' + what + ' を消します' : '間違えて入れた金額を消す（' + what + '）';
+  }
+
   function updateCalc() {
     updateP8();
+    updateClr();
     const box = $('calc');
     const ready = S.status && S.status.ready;
     const amt = finalAmount();
@@ -507,20 +522,23 @@
     }
   }
 
-  async function save() {
-    const amt = finalAmount();
-    if (!amt || !$('vendor').value) return;
+  async function save(how) {
+    const clear = how === 'clear';  // 間違えて入れた金額を消す
+    const amt = clear ? 0 : finalAmount();
+    if ((!clear && !amt) || !$('vendor').value) return;
     S.busy = true; updateCalc();
     $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
     try {
       const r = await api('save', { req: {
-        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: modeVal(), photos: S.items.map((i) => i.photo).filter(Boolean),
+        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: clear ? 'clear' : modeVal(), photos: clear ? [] : S.items.map((i) => i.photo).filter(Boolean),
       } });
       S.last = r;
       const d = r.date.split('-');
       $('doneText').innerHTML =
         '<div class="big">' + Number(d[1]) + '/' + Number(d[2]) + '　' + r.label + '</div>' +
-        '<div>' + fmt(r.before) + '円 → <b>' + fmt(r.after) + '円</b>（セル ' + r.a1 + '）</div>';
+        '<div>' + fmt(r.before) + '円 → <b>' + fmt(r.after) + '円</b>（セル ' + r.a1 + '）</div>' +
+        (r.cleared ? '<div class="note">間違えて入れた金額を消しました。元に戻すときは「取り消す」を押してください。</div>' : '');
+      $('doneTitle').textContent = r.cleared ? '✓ 消しました' : '✓ 入力しました';
       $('sheetLink').href = r.sheetUrl;
       $('undoBtn').disabled = false; $('undoBtn').textContent = '取り消す';
       $('form').classList.add('hidden'); $('done').classList.remove('hidden');
@@ -587,6 +605,11 @@
     if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
   $('manBtn').addEventListener('click', addManual);
+  $('clrBtn').addEventListener('click', () => {
+    if (Date.now() - clrArmed > 5000) { clrArmed = Date.now(); updateClr(); setTimeout(updateClr, 5100); return; }
+    clrArmed = 0;
+    save('clear');
+  });
   $('p8Btn').addEventListener('click', () => {
     S.plus8 = !S.plus8;
     if (S.plus8 && S.sumMode === 'incl') { S.sumMode = 'asis'; recalc(); } else updateCalc();
