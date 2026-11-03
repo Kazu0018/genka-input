@@ -43,6 +43,7 @@
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   label.f { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 6px; }
+  .dinfo { margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; background: #24395c; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.4; }
   input[type=date], input[type=text], select {
     width: 100%; min-height: 50px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
     background: #fff; color: var(--ink); font: inherit; font-size: 17px; -webkit-appearance: none; appearance: none; }
@@ -127,6 +128,7 @@
     <div id="readResult" class="read hidden"></div>
 
     <label class="f" for="date">日付</label>
+    <div id="dateInfo" class="dinfo hidden"></div>
     <input id="date" type="date">
 
     <label class="f" for="vendor">業者・売上</label>
@@ -333,6 +335,14 @@
     document.querySelector('header').style.background = c;
     $('saveBtn').style.background = c; $('saveBtn').style.borderColor = c;
     if (!S.busy) $('saveBtn').textContent = saveLabel();
+    // 入力する店舗と日付（西暦・曜日つき）を日付欄に出す
+    const di = $('dateInfo'), dv = ($('date').value || '').split('-');
+    if (dv.length === 3 && storeLabel()) {
+      const wd = '日月火水木金土'[new Date(Number(dv[0]), Number(dv[1]) - 1, Number(dv[2])).getDay()];
+      di.textContent = storeLabel() + '　' + dv[0] + '年' + Number(dv[1]) + '月' + Number(dv[2]) + '日（' + wd + '）';
+      di.style.background = c || '#24395c';
+      di.classList.remove('hidden');
+    } else di.classList.add('hidden');
   }
 
   function updateCalc() {
@@ -348,7 +358,7 @@
     const d = $('date').value.split('-');
     const after = modeVal() === 'overwrite' ? amt : S.current + amt;
     box.classList.remove('hidden');
-    box.innerHTML = '<b>' + esc(storeLabel()) + '</b>　' + Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>' + (S.plus8 ? '（8%込み）' : '');
+    box.innerHTML = '<b>' + esc(storeLabel()) + '</b>　' + d[0] + '/' + Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>' + (S.plus8 ? '（8%込み）' : '');
   }
 
   function resizeImage(file, max) {
@@ -561,7 +571,7 @@
       const d = r.date.split('-');
       $('doneText').innerHTML =
         '<div style="font-weight:700">' + esc(storeLabel()) + '</div>' +
-        '<div class="big">' + Number(d[1]) + '/' + Number(d[2]) + '　' + r.label + '</div>' +
+        '<div class="big">' + d[0] + '/' + Number(d[1]) + '/' + Number(d[2]) + '　' + r.label + '</div>' +
         '<div>' + fmt(r.before) + '円 → <b>' + fmt(r.after) + '円</b>（セル ' + r.a1 + '）</div>' +
         (r.cleared ? '<div class="note">間違えて入れた金額を消しました。元に戻すときは「取り消す」を押してください。</div>' : '');
       $('doneTitle').textContent = r.cleared ? '✓ 消しました' : '✓ 入力しました';
@@ -609,6 +619,7 @@
   $('libBtn').addEventListener('click', () => $('fileLib').click());
   $('fileLib').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; onPhoto(f); });
   $('date').addEventListener('change', () => {
+    applyStoreLook();
     if (!S.status || monthOf($('date').value) !== S.status.ym) loadStatus(); else refreshCurrent();
   });
   $('vendor').addEventListener('change', () => { applyKind(); refreshCurrent(); });
