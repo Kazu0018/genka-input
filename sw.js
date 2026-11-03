@@ -1,5 +1,5 @@
 // 原価表入力：画面ファイルだけを保存して起動を速くする（入力データは保存しない）
-const CACHE = 'genka-input-v8';
+const CACHE = 'genka-input-v9';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -17,7 +17,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
   // 新しい版があれば取りに行き、圏外のときは保存済みの画面を使う
   e.respondWith(
-    fetch(req)
+    fetch(req.url, { cache: 'no-cache' })  // ブラウザの一時保存を使わず、毎回新しい版を確かめる
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy));
