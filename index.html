@@ -238,9 +238,10 @@
         return;
       }
       $('convertCard').classList.add('hidden');
-      $('fileName').textContent = st.fileName + '（読み取り：' + (st.readLocked ? '停止中' : st.engine) + '）';
+      $('fileName').textContent = st.fileName + (st.readLocked ? '' : '（読み取り：' + st.engine + '）');
       fillVendors(st.vendors);
       setPhotoBtns(false);
+      $('camBtn').closest('.row').classList.toggle('hidden', !!st.readLocked);  // 読み取りを止めている店舗は「撮影する」「写真から選ぶ」を出さない
       await refreshCurrent();
     } catch (e) {
       showMsg('読み込みに失敗しました：' + errText(e), 'err');
