@@ -150,6 +150,7 @@
     </div>
 
     <div id="calc" class="calc hidden"></div>
+    <div id="dupBox" class="msg info hidden" style="margin-top:12px"></div>
 
     <button id="saveBtn" class="btn primary" style="margin-top:14px" disabled>原価表に入力</button>
     <p class="note">数式の入ったセルには書き込みません。読み取り結果は必ず伝票と見比べてから入力してください。</p>
@@ -218,6 +219,7 @@
     const date = $('date').value;
     if (!date) return;
     $('fileName').textContent = '読み込み中…';
+    applyStoreLook();
     setPhotoBtns(true); $('saveBtn').disabled = true;
     try {
       const st = await api('status', { s: STORE, date: date });
@@ -321,9 +323,21 @@
     b.textContent = Date.now() - clrArmed < 5000 ? 'もう一度押すと ' + what + ' を消します' : '間違えて入れた金額を消す（' + what + '）';
   }
 
+  // 店舗ごとの色と表示（店舗の選び間違い防止）
+  const STORE_COLORS = { omoro: '#24395c', coodeta: '#8c2f39', kumoji: '#1f6f61', chatan: '#1f5fa8', urasoe: '#7a4b1c', misato: '#2e7d32', yomitan: '#5e3b8f', moromi: '#a1561b' };
+  function storeLabel() { const o = $('store').selectedOptions[0]; return o ? o.textContent : ''; }
+  function saveLabel() { const n = storeLabel(); return n ? n + 'の原価表に入力' : '原価表に入力'; }
+  function applyStoreLook() {
+    const c = STORE_COLORS[STORE] || '';
+    document.querySelector('header').style.background = c;
+    $('saveBtn').style.background = c; $('saveBtn').style.borderColor = c;
+    if (!S.busy) $('saveBtn').textContent = saveLabel();
+  }
+
   function updateCalc() {
     updateP8();
     updateClr();
+    applyStoreLook();
     const box = $('calc');
     const ready = S.status && S.status.ready;
     const amt = finalAmount();
@@ -333,7 +347,7 @@
     const d = $('date').value.split('-');
     const after = modeVal() === 'overwrite' ? amt : S.current + amt;
     box.classList.remove('hidden');
-    box.innerHTML = Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>' + (S.plus8 ? '（8%込み）' : '');
+    box.innerHTML = '<b>' + esc(storeLabel()) + '</b>　' + Number(d[1]) + '/' + Number(d[2]) + '　' + vendorLabel() + '<br>現在 ' + fmt(S.current) + '円 → <b>' + fmt(after) + '円</b>' + (S.plus8 ? '（8%込み）' : '');
   }
 
   function resizeImage(file, max) {
@@ -531,17 +545,21 @@
 
   async function save(how) {
     const clear = how === 'clear';  // 間違えて入れた金額を消す
+    const force = how === 'force';  // 重複の警告を見たうえで入力する
+    $('dupBox').classList.add('hidden');
     const amt = clear ? 0 : finalAmount();
     if ((!clear && !amt) || !$('vendor').value) return;
     S.busy = true; updateCalc();
     $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
     try {
       const r = await api('save', { req: {
-        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: clear ? 'clear' : modeVal(), photos: clear ? [] : S.items.map((i) => i.photo).filter(Boolean),
+        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: clear ? 'clear' : modeVal(), force: force, photos: clear ? [] : S.items.map((i) => i.photo).filter(Boolean),
       } });
+      if (r && r.needConfirm) { showDup(r.warnings || []); return; }
       S.last = r;
       const d = r.date.split('-');
       $('doneText').innerHTML =
+        '<div style="font-weight:700">' + esc(storeLabel()) + '</div>' +
         '<div class="big">' + Number(d[1]) + '/' + Number(d[2]) + '　' + r.label + '</div>' +
         '<div>' + fmt(r.before) + '円 → <b>' + fmt(r.after) + '円</b>（セル ' + r.a1 + '）</div>' +
         (r.cleared ? '<div class="note">間違えて入れた金額を消しました。元に戻すときは「取り消す」を押してください。</div>' : '');
@@ -555,7 +573,7 @@
       showMsg('入力できませんでした：' + errText(e), 'err');
     } finally {
       S.busy = false;
-      $('saveBtn').textContent = '原価表に入力';
+      $('saveBtn').textContent = saveLabel();
       updateCalc();
     }
   }
@@ -576,6 +594,7 @@
 
   function next() {
     S.items = []; S.sumMode = 'asis'; S.plus8 = false;
+    $('dupBox').classList.add('hidden');
     $('file').value = ''; $('fileLib').value = ''; $('amount').value = ''; $('vendor').value = ''; applyKind();
     renderItems(); recalc(); $('readResult').classList.add('hidden');
     document.querySelector('input[name=mode][value=add]').checked = true;
@@ -611,6 +630,18 @@
     const t = ins.find((x) => !x.value) || ins[ins.length - 1];
     if (t) { t.focus(); t.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
+  /** 二重入力・店舗間違いの可能性があるときの確認 */
+  function showDup(ws) {
+    const b = $('dupBox');
+    b.innerHTML = '<b>⚠ 確認してください</b><br>' + ws.map(esc).join('<br>') +
+      '<div class="row" style="margin-top:10px"><button type="button" id="dupCancel" class="btn" style="font-size:15px">やめる</button>' +
+      '<button type="button" id="dupGo" class="btn primary" style="font-size:15px">それでも入力する</button></div>';
+    b.classList.remove('hidden');
+    $('dupGo').onclick = () => { b.classList.add('hidden'); save('force'); };
+    $('dupCancel').onclick = () => { b.classList.add('hidden'); };
+    b.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
   $('manBtn').addEventListener('click', addManual);
   $('clrBtn').addEventListener('click', () => {
     if (Date.now() - clrArmed > 5000) { clrArmed = Date.now(); updateClr(); setTimeout(updateClr, 5100); return; }
@@ -697,6 +728,8 @@
     STORE = $('store').value; LS.set('store', STORE);
     if (!$('done').classList.contains('hidden')) next();
     S.status = null;
+    $('dupBox').classList.add('hidden');
+    applyStoreLook();
     fillVendors([]);
     loadStatus();
   });
