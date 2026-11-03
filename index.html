@@ -106,9 +106,9 @@
   <div id="msg" class="msg hidden"></div>
 
   <section id="setup" class="card hidden">
-    <h2>合言葉を入力</h2>
-    <p class="note" style="margin-top:0">管理者から聞いた合言葉を入れてください（ひらがな・カタカナどちらでもOK）。この端末に保存され、次回からは入力不要です。</p>
-    <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="合言葉">
+    <h2>パスワードを入力</h2>
+    <p class="note" style="margin-top:0">管理者から聞いたパスワードを入れてください（ひらがな・カタカナどちらでもOK）。この端末に保存され、次回からは入力不要です。</p>
+    <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="パスワード">
     <button id="tokenBtn" class="btn primary" style="margin-top:12px">保存して始める</button>
   </section>
 
@@ -197,7 +197,7 @@
     let j;
     try { j = await res.json(); } catch (e) { throw new Error('サーバーの応答を読み取れませんでした（' + res.status + '）'); }
     if (!j.ok) {
-      if (/合言葉/.test(j.error || '')) showSetup(j.error);
+      if (/合言葉|パスワード/.test(j.error || '')) showSetup(j.error);
       throw new Error(j.error || 'エラーが発生しました');
     }
     return j.data;
@@ -687,7 +687,7 @@
   function showSetup(err) {
     $('setup').classList.remove('hidden');
     $('form').classList.add('hidden'); $('done').classList.add('hidden'); $('convertCard').classList.add('hidden');
-    $('fileName').textContent = '合言葉の入力が必要です';
+    $('fileName').textContent = 'パスワードの入力が必要です';
     $('tokenInput').value = TOKEN;
     if (err) showMsg(err, 'err');
   }
@@ -712,7 +712,7 @@
       showMsg('');
       await loadStatus();
     } catch (e) {
-      if (!/合言葉/.test(errText(e))) showMsg(errText(e), 'err');
+      if (!/合言葉|パスワード/.test(errText(e))) showMsg(errText(e), 'err');
     }
   }
 
