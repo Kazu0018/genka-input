@@ -186,18 +186,30 @@
   const todayStr = () => { const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
   const monthOf = (s) => s ? s.slice(0, 7) : '';
   async function api(action, body) {
-    let res;
+    // 返事がないまま止まらないように、時間を区切る（写真の読み取り・ファイル作成は長め）
+    const limit = (action === 'read' || action === 'convert') ? 120000 : 40000;
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), limit) : null;
+    let res, j;
     try {
-      res = await fetch(API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({ token: TOKEN, action: action }, body || {})),
-      });
-    } catch (e) {
-      throw new Error('通信できませんでした。電波の良い場所でもう一度お試しください。');
+      try {
+        res = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(Object.assign({ token: TOKEN, action: action }, body || {})),
+          signal: ctl ? ctl.signal : undefined,
+        });
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw new Error('サーバーから' + (limit / 1000) + '秒たっても返事がありません。電波の良い場所で、もう一度お試しください。');
+        throw new Error('通信できませんでした。電波の良い場所でもう一度お試しください。');
+      }
+      try { j = await res.json(); } catch (e) {
+        if (e && e.name === 'AbortError') throw new Error('サーバーから' + (limit / 1000) + '秒たっても返事がありません。電波の良い場所で、もう一度お試しください。');
+        throw new Error('サーバーの応答を読み取れませんでした（' + res.status + '）');
+      }
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    let j;
-    try { j = await res.json(); } catch (e) { throw new Error('サーバーの応答を読み取れませんでした（' + res.status + '）'); }
     if (!j.ok) {
       if (/合言葉|パスワード/.test(j.error || '')) showSetup(j.error);
       throw new Error(j.error || 'エラーが発生しました');
@@ -246,9 +258,11 @@
       $('camBtn').closest('.row').classList.toggle('hidden', !!st.readLocked);  // 読み取りを止めている店舗は「撮影する」「写真から選ぶ」を出さない
       await refreshCurrent();
     } catch (e) {
-      showMsg('読み込みに失敗しました：' + errText(e), 'err');
+      $('fileName').textContent = '読み込みに失敗しました';
+      showMsg('読み込みに失敗しました：' + esc(errText(e)) + RETRY, 'err');
     }
   }
+  const RETRY = '<br><button type="button" class="btn" style="margin-top:8px;min-height:42px" onclick="location.reload()">もう一度読み込む</button>';
 
   function fillVendors(list) {
     const keep = vendorLabel();
@@ -723,7 +737,10 @@
       showMsg('');
       await loadStatus();
     } catch (e) {
-      if (!/合言葉|パスワード/.test(errText(e))) showMsg(errText(e), 'err');
+      if (!/合言葉|パスワード/.test(errText(e))) {
+        $('fileName').textContent = '読み込みに失敗しました';
+        showMsg(esc(errText(e)) + RETRY, 'err');
+      }
     }
   }
 
