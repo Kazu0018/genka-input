@@ -48,6 +48,11 @@
   .dinfo .ddate { font-size: 22px; font-weight: 800; line-height: 1.3; }
   .dinfo .dcell { font-size: 18px; font-weight: 700; margin-top: 2px; }
   .dinfo .dcell.dim { font-size: 14px; font-weight: 500; opacity: .8; }
+  .dinfo .dwarn { display: inline-block; margin-top: 6px; padding: 2px 10px; border-radius: 8px; background: #fde68a; color: #7c2d12; font-size: 15px; font-weight: 800; }
+  .daylist { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fafaf7; }
+  .daylist .dl-h { display: block; font-size: 13px; color: var(--sub); margin-bottom: 2px; }
+  .daylist .dl-i { display: inline-block; margin: 4px 4px 0 0; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 14px; color: var(--ink); }
+  .daylist .dl-i.on { border-color: var(--acc); background: #fdf1ec; }
   input[type=date], input[type=text], select {
     width: 100%; min-height: 50px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
     background: #fff; color: var(--ink); font: inherit; font-size: 17px; -webkit-appearance: none; appearance: none; }
@@ -137,6 +142,7 @@
 
     <label class="f" for="vendor">業者・売上</label>
     <select id="vendor"><option value="">業者・売上を選ぶ</option></select>
+    <div id="dayList" class="daylist hidden"></div>
 
     <div id="items"></div>
     <div id="summary" class="sum hidden"></div>
@@ -240,7 +246,16 @@
     applyStoreLook();
     setPhotoBtns(true); $('saveBtn').disabled = true;
     try {
-      const st = await api('status', { s: STORE, date: date });
+      await applyStatus(await api('status', { s: STORE, date: date }), date);
+    } catch (e) {
+      $('fileName').textContent = '読み込みに失敗しました';
+      showMsg('読み込みに失敗しました：' + esc(errText(e)) + RETRY, 'err');
+    }
+  }
+
+  /** 原価表の状況を画面に反映する（開いたときは init でまとめて受け取ったものを使う） */
+  async function applyStatus(st, date) {
+    try {
       S.status = Object.assign({ ym: monthOf(date) }, st);
       if (!st.ready) {
         $('fileName').textContent = st.month + '月のファイル：未作成';
@@ -306,6 +321,12 @@
     updateCalc();
     const col = $('vendor').value;
     if (!S.status || !S.status.ready || !col) return;
+    const dc = S.status.day;  // その日の金額をまとめて持っていれば、すぐ出す（問い合わせない）
+    if (dc && dc.date === $('date').value && dc.values && Object.prototype.hasOwnProperty.call(dc.values, col)) {
+      S.current = Number(dc.values[col]) || 0;
+      updateCalc();
+      return;
+    }
     try {
       S.current = await api('current', { s: STORE, date: $('date').value, col: Number(col) });
     } catch (e) {
@@ -362,11 +383,26 @@
       const colName = (n) => { let s = ''; while (n > 0) { s = String.fromCharCode(65 + (n - 1) % 26) + s; n = Math.floor((n - 1) / 26); } return s; };
       di.innerHTML = '<div class="dstore">' + esc(storeLabel()) + '</div>' +
         '<div class="ddate">' + dv[0] + '年' + Number(dv[1]) + '月' + Number(dv[2]) + '日（' + wd + '）</div>' +
+        ($('date').value !== todayStr() ? '<div class="dwarn">⚠ 今日（' + Number(todayStr().slice(5, 7)) + '/' + Number(todayStr().slice(8)) + '）ではありません</div>' : '') +
         (col ? '<div class="dcell">→ ' + esc(vendorLabel()) + ' の欄（セル ' + colName(col) + (Number(dv[2]) + 2) + '）</div>'
              : '<div class="dcell dim">業者・売上を選ぶと、入力するセルが出ます</div>');
       di.style.background = c || '#24395c';
       di.classList.remove('hidden');
     } else di.classList.add('hidden');
+    renderDayList();
+  }
+
+  /** 選んでいる日に、もう金額が入っている業者・売上の一覧（押すとその業者を選ぶ） */
+  function renderDayList() {
+    const box = $('dayList');
+    const st = S.status, dc = st && st.day;
+    if (!st || !st.ready || !dc || !dc.values || dc.date !== $('date').value) { box.classList.add('hidden'); return; }
+    const items = (st.vendors || []).filter((v) => Number(dc.values[v.col]) > 0);
+    box.classList.remove('hidden');
+    if (!items.length) { box.innerHTML = '<span class="dl-h">この日はまだ何も入っていません</span>'; return; }
+    box.innerHTML = '<span class="dl-h">この日にもう入っている（' + items.length + '件）</span>' +
+      items.map((v) => '<button type="button" class="dl-i' + (String(v.col) === $('vendor').value ? ' on' : '') + '" data-col="' + v.col + '">' +
+        esc(v.label) + ' <b>' + fmt(dc.values[v.col]) + '</b></button>').join('');
   }
 
   function updateCalc() {
@@ -496,6 +532,7 @@
     });
     const vendors = [...new Set(S.items.map((i) => i.r && i.r.vendor).filter(Boolean))];
     if (!(anyExcl && incl !== sum)) S.sumMode = 'asis';
+    else if (!S.sumTouched) { S.sumMode = 'incl'; S.plus8 = false; }  // 税抜の伝票は、はじめから税込合計にする
     box.classList.remove('hidden');
     box.innerHTML = '<div class="st">' + S.items.length + '枚の合計</div>';
     const chips = document.createElement('div');
@@ -507,7 +544,7 @@
       b.type = 'button';
       b.className = 'chip' + (S.sumMode === o.mode ? ' on' : '');
       b.textContent = o.text;
-      b.addEventListener('click', () => { S.sumMode = o.mode; if (o.mode === 'incl') S.plus8 = false; recalc(); });
+      b.addEventListener('click', () => { S.sumMode = o.mode; S.sumTouched = true; if (o.mode === 'incl') S.plus8 = false; recalc(); });
       chips.appendChild(b);
     });
     box.appendChild(chips);
@@ -588,9 +625,10 @@
     $('saveBtn').innerHTML = '<span class="spin"></span>入力中…';
     try {
       const r = await api('save', { req: {
-        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: clear ? 'clear' : modeVal(), force: force, photos: clear ? [] : S.items.map((i) => i.photo).filter(Boolean),
+        s: STORE, date: $('date').value, col: Number($('vendor').value), amount: amt, mode: clear ? 'clear' : modeVal(), force: force, photos: [],
       } });
       if (r && r.needConfirm) { showDup(r.warnings || []); return; }
+      if (r.day && S.status) S.status.day = r.day;  // 保存後のその日の金額
       S.last = r;
       const d = r.date.split('-');
       $('doneText').innerHTML =
@@ -619,6 +657,7 @@
     try {
       const v = await api('undo', { res: S.last });
       showMsg('取り消しました（' + S.last.label + '：' + fmt(v) + '円に戻しました）', 'ok');
+      if (S.status && S.status.day && S.status.day.values && S.status.day.date === S.last.date) S.status.day.values[S.last.col] = Number(v) || 0;
       S.last = null;
       $('undoBtn').textContent = '取り消し済み';
     } catch (e) {
@@ -628,7 +667,7 @@
   }
 
   function next() {
-    S.items = []; S.sumMode = 'asis'; S.plus8 = false;
+    S.items = []; S.sumMode = 'asis'; S.plus8 = false; S.sumTouched = false;
     $('dupBox').classList.add('hidden');
     $('file').value = ''; $('fileLib').value = ''; $('amount').value = ''; $('vendor').value = ''; applyKind();
     renderItems(); recalc(); $('readResult').classList.add('hidden');
@@ -643,8 +682,9 @@
   $('libBtn').addEventListener('click', () => $('fileLib').click());
   $('fileLib').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; onPhoto(f); });
   $('date').addEventListener('change', () => {
+    autoToday = null;  // 手で日付を変えたら、日付が変わっても自動で今日に戻さない
     applyStoreLook();
-    if (!S.status || monthOf($('date').value) !== S.status.ym) loadStatus(); else refreshCurrent();
+    loadStatus();  // その日の入力済みの金額もまとめて読み直す
   });
   $('vendor').addEventListener('change', () => { applyKind(); applyStoreLook(); refreshCurrent(); });
   $('amount').addEventListener('input', () => {
@@ -678,6 +718,25 @@
     b.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }
 
+  $('dayList').addEventListener('click', (e) => {
+    const b = e.target.closest('.dl-i');
+    if (!b) return;
+    $('vendor').value = b.dataset.col;
+    $('vendor').dispatchEvent(new Event('change'));
+  });
+  // アプリを開いたまま日付が変わったら、自動で今日に戻す（手で日付を変えたときは戻さない）
+  let autoToday = null;
+  function checkToday() {
+    const t = todayStr();
+    if (autoToday && autoToday !== t && $('date').value === autoToday) {
+      $('date').value = t; autoToday = t;
+      applyStoreLook();
+      if (!S.busy) loadStatus();
+    } else applyStoreLook();
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkToday(); });
+  setInterval(checkToday, 60000);
+
   $('manBtn').addEventListener('click', addManual);
   $('clrBtn').addEventListener('click', () => {
     if (Date.now() - clrArmed > 5000) { clrArmed = Date.now(); updateClr(); setTimeout(updateClr, 5100); return; }
@@ -686,7 +745,7 @@
   });
   $('p8Btn').addEventListener('click', () => {
     S.plus8 = !S.plus8;
-    if (S.plus8 && S.sumMode === 'incl') { S.sumMode = 'asis'; recalc(); } else updateCalc();
+    if (S.plus8 && S.sumMode === 'incl') { S.sumMode = 'asis'; S.sumTouched = true; recalc(); } else updateCalc();
   });
   $('saveBtn').addEventListener('click', save);
   $('undoBtn').addEventListener('click', undo);
@@ -730,7 +789,9 @@
   async function start() {
     if (!TOKEN) { showSetup(); return; }
     try {
-      const stores = await api('stores');
+      const date = $('date').value;
+      const d0 = await api('init', { s: STORE, date: date });  // 店舗一覧・原価表の状況・その日の金額を1回で受け取る
+      const stores = d0.stores;
       const sel = $('store');
       sel.innerHTML = '';
       stores.forEach((x) => {
@@ -745,7 +806,8 @@
       $('setup').classList.add('hidden');
       $('form').classList.remove('hidden');
       showMsg('');
-      await loadStatus();
+      applyStoreLook();
+      if (d0.status && d0.s === STORE) await applyStatus(d0.status, date); else await loadStatus();
     } catch (e) {
       if (!/合言葉|パスワード/.test(errText(e))) {
         $('fileName').textContent = '読み込みに失敗しました';
@@ -778,6 +840,7 @@
   }
 
   $('date').value = todayStr();
+  autoToday = $('date').value;
   start();
 </script>
 </body>
