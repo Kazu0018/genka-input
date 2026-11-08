@@ -927,6 +927,7 @@
     const t = $('tokenInput').value.trim().toLowerCase();
     if (!t) return;
     TOKEN = t; LS.set('token', t);
+    STORE = ''; LS.del('store');  // パスワードで開いたときは最初の店舗（おもろまち店）から。使える店舗が1つならその店舗
     start();
   });
   $('gearBtn').addEventListener('click', () => {

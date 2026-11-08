@@ -1,5 +1,5 @@
 // 原価表入力：画面ファイルだけを保存して起動を速くする（入力データは保存しない）
-const CACHE = 'genka-input-v13';
+const CACHE = 'genka-input-v14';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
