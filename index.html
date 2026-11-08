@@ -43,7 +43,11 @@
   .row { display: flex; gap: 8px; }
   .row > * { flex: 1; }
   label.f { display: block; font-size: 13px; color: var(--sub); margin: 12px 0 6px; }
-  .dinfo { margin: 0 0 8px; padding: 9px 12px; border-radius: 10px; background: #24395c; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.4; }
+  .dinfo { margin: 0 0 8px; padding: 10px 14px; border-radius: 12px; background: #24395c; color: #fff; font-size: 16px; font-weight: 700; line-height: 1.4; }
+  .dinfo .dstore { font-size: 14px; opacity: .85; }
+  .dinfo .ddate { font-size: 22px; font-weight: 800; line-height: 1.3; }
+  .dinfo .dcell { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .dinfo .dcell.dim { font-size: 14px; font-weight: 500; opacity: .8; }
   input[type=date], input[type=text], select {
     width: 100%; min-height: 50px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
     background: #fff; color: var(--ink); font: inherit; font-size: 17px; -webkit-appearance: none; appearance: none; }
@@ -353,7 +357,13 @@
     const di = $('dateInfo'), dv = ($('date').value || '').split('-');
     if (dv.length === 3 && storeLabel()) {
       const wd = '日月火水木金土'[new Date(Number(dv[0]), Number(dv[1]) - 1, Number(dv[2])).getDay()];
-      di.textContent = storeLabel() + '　' + dv[0] + '年' + Number(dv[1]) + '月' + Number(dv[2]) + '日（' + wd + '）';
+      // 入力しようとしているマス（業者の列 × 日付の行。1日が3行目）
+      const col = Number($('vendor').value);
+      const colName = (n) => { let s = ''; while (n > 0) { s = String.fromCharCode(65 + (n - 1) % 26) + s; n = Math.floor((n - 1) / 26); } return s; };
+      di.innerHTML = '<div class="dstore">' + esc(storeLabel()) + '</div>' +
+        '<div class="ddate">' + dv[0] + '年' + Number(dv[1]) + '月' + Number(dv[2]) + '日（' + wd + '）</div>' +
+        (col ? '<div class="dcell">→ ' + esc(vendorLabel()) + ' の欄（セル ' + colName(col) + (Number(dv[2]) + 2) + '）</div>'
+             : '<div class="dcell dim">業者・売上を選ぶと、入力するセルが出ます</div>');
       di.style.background = c || '#24395c';
       di.classList.remove('hidden');
     } else di.classList.add('hidden');
@@ -636,7 +646,7 @@
     applyStoreLook();
     if (!S.status || monthOf($('date').value) !== S.status.ym) loadStatus(); else refreshCurrent();
   });
-  $('vendor').addEventListener('change', () => { applyKind(); refreshCurrent(); });
+  $('vendor').addEventListener('change', () => { applyKind(); applyStoreLook(); refreshCurrent(); });
   $('amount').addEventListener('input', () => {
     const n = amountVal();
     $('amount').value = n ? fmt(n) : '';
