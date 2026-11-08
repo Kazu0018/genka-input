@@ -24,7 +24,8 @@
     font-size: 16px; -webkit-text-size-adjust: 100%; }
   header { background: var(--ink); color: #fff; padding: calc(10px + env(safe-area-inset-top)) 14px 12px; position: sticky; top: 0; z-index: 5; }
   .hrow { display: flex; align-items: center; gap: 8px; }
-  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; line-height: 1.15; }
+  header h1 { margin: 0; font-size: 17px; letter-spacing: .02em; white-space: nowrap; line-height: 1.15; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  #tokenInput { -webkit-text-security: disc; }  /* 入力したパスワードを画面に出さない */
   header h1 small { display: block; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-weight: 600; font-size: 12px; letter-spacing: .02em; color: #f2c25b; }
   header p { margin: 4px 0 0; font-size: 12px; opacity: .7; }
   #store { flex: 1; min-width: 0; min-height: 40px; padding: 6px 30px 6px 10px; font-size: 16px; font-weight: 700; color: #fff; border: 1px solid #55524b; border-radius: 10px;
@@ -126,11 +127,10 @@
     </div>
     <button id="qrPhoto" type="button" class="linkbtn">うまく読めないとき：QRコードを写真に撮って読み取る</button>
     <input id="qrFile" type="file" accept="image/*" capture="environment" class="hidden">
-    <details style="margin-top:18px">
-      <summary class="note" style="cursor:pointer">管理者用（パスワードで全店舗）</summary>
-      <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="パスワード" style="margin-top:8px">
+    <div id="adminBox" class="hidden" style="margin-top:18px">
+      <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="パスワード">
       <button id="tokenBtn" class="btn" style="margin-top:10px">保存して始める</button>
-    </details>
+    </div>
   </section>
 
   <div id="convertCard" class="card hidden">
@@ -800,7 +800,8 @@
     $('setup').classList.remove('hidden');
     $('form').classList.add('hidden'); $('done').classList.add('hidden'); $('convertCard').classList.add('hidden');
     $('fileName').textContent = '店舗のQRコードを読み取ってください';
-    $('tokenInput').value = isQrKey(TOKEN) ? '' : TOKEN;
+    $('tokenInput').value = '';  // 保存しているパスワードは画面に出さない
+    $('adminBox').classList.add('hidden');
     if (err) showMsg(err, 'err');
   }
 
@@ -926,9 +927,22 @@
   $('tokenBtn').addEventListener('click', () => {
     const t = $('tokenInput').value.trim().toLowerCase();
     if (!t) return;
+    $('tokenInput').value = '';
     TOKEN = t; LS.set('token', t);
     STORE = ''; LS.del('store');  // パスワードで開いたときは最初の店舗（おもろまち店）から。使える店舗が1つならその店舗
     start();
+  });
+  // パスワード欄は普段は出さない：左上の「原価表」を3秒以内に5回タップすると出る
+  let titleTaps = [];
+  document.querySelector('header h1').addEventListener('click', () => {
+    const now = Date.now();
+    titleTaps = titleTaps.filter((x) => now - x < 3000).concat(now);
+    if (titleTaps.length < 5) return;
+    titleTaps = [];
+    stopQr();
+    showSetup();
+    $('adminBox').classList.remove('hidden');
+    $('tokenInput').focus();
   });
   $('gearBtn').addEventListener('click', () => {
     if ($('setup').classList.contains('hidden')) showSetup(); else start();
