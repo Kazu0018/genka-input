@@ -211,7 +211,6 @@
     <button type="button" id="genkaShare" class="btn primary" style="margin-top:12px" disabled>📤 画像でメールを送る</button>
     <p class="note" style="margin-top:4px">押すと共有の画面が出ます。「メール」を選んで送ってください。</p>
     <div id="genkaImgBox" class="hidden" style="margin-top:8px"></div>
-    <button type="button" id="genkaMail" class="btn" style="margin-top:8px" disabled>✉ 文字でメールを作る</button>
     <button type="button" id="genkaClose" class="btn" style="margin-top:8px">閉じる</button>
   </section>
 </main>
@@ -992,7 +991,7 @@
   const rateCls = (v, t) => { const n = parseFloat(v); if (!t || isNaN(n)) return ''; return n > t ? 'over' : 'under'; };
   const cellText = (r, i) => { const rate = isRate(r[0]); return i === 0 ? (rate ? rateLabel(r[0]) : r[0]) : (rate && r[i] !== '-' ? r[i] + '%' : r[i]); };
   const genkaSubject = (d) => d.store + ' ' + d.y + '年' + d.m + '月 原価表（' + d.at + ' 時点）';
-  function setGenkaBtns(on) { $('genkaShare').disabled = !on; $('genkaMail').disabled = !on; }
+  function setGenkaBtns(on) { $('genkaShare').disabled = !on; }
 
   async function openGenka(ym) {
     if (!STORE) return;
@@ -1102,15 +1101,6 @@
       catch (e) { if (!e || e.name !== 'AbortError') showGenkaImg(); }
     } else showGenkaImg();
   });
-  $('genkaMail').addEventListener('click', () => {
-    if (!G.d) return;
-    const d = G.d;
-    const lines = [genkaSubject(d), '単位：円（税込）', '', d.head.join(' ／ ')]
-      .concat(d.rows.map((r) => cellText(r, 0) + '：' + r.slice(1).map((v, i) => cellText(r, i + 1)).join(' ／ ')))
-      .concat([''], d.notes);
-    goMail('mailto:?subject=' + encodeURIComponent(genkaSubject(d)) + '&body=' + encodeURIComponent(lines.join('\n')));
-  });
-  function goMail(url) { location.href = url; }  // メールのアプリを開く
   function closeGenka() {
     $('genkaCard').classList.add('hidden'); $('genkaImgBox').classList.add('hidden');
     $(G.back === 'done' ? 'done' : 'form').classList.remove('hidden');
