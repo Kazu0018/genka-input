@@ -208,8 +208,10 @@
     <h2 id="genkaTitle" style="margin-top:0">原価表</h2>
     <div id="genkaMonths" class="chips" style="margin:0 0 10px"></div>
     <div id="genkaBody"></div>
-    <button type="button" id="genkaShare" class="btn primary" style="margin-top:12px" disabled>📤 画像でメールを送る</button>
-    <p class="note" style="margin-top:4px">押すと共有の画面が出ます。「メール」を選んで送ってください。</p>
+    <button type="button" id="genkaSend" class="btn primary" style="margin-top:12px" disabled>📧 メールで送信</button>
+    <p id="genkaTo" class="note" style="margin-top:4px"></p>
+    <div id="genkaSent" class="msg hidden"></div>
+    <button type="button" id="genkaShare" class="linkbtn" disabled>うまく送れないとき：共有から送る</button>
     <div id="genkaImgBox" class="hidden" style="margin-top:8px"></div>
     <button type="button" id="genkaClose" class="btn" style="margin-top:8px">閉じる</button>
   </section>
@@ -991,7 +993,7 @@
   const rateCls = (v, t) => { const n = parseFloat(v); if (!t || isNaN(n)) return ''; return n > t ? 'over' : 'under'; };
   const cellText = (r, i) => { const rate = isRate(r[0]); return i === 0 ? (rate ? rateLabel(r[0]) : r[0]) : (rate && r[i] !== '-' ? r[i] + '%' : r[i]); };
   const genkaSubject = (d) => d.store + ' ' + d.y + '年' + d.m + '月 原価表（' + d.at + ' 時点）';
-  function setGenkaBtns(on) { $('genkaShare').disabled = !on; }
+  function setGenkaBtns(on) { $('genkaShare').disabled = !on; $('genkaSend').disabled = !on || !(G.d && G.d.mailTo); }
 
   async function openGenka(ym) {
     if (!STORE) return;
@@ -999,13 +1001,14 @@
     G.ym = ym || base;
     if (!G.back) G.back = $('done').classList.contains('hidden') ? 'form' : 'done';
     $('form').classList.add('hidden'); $('done').classList.add('hidden');
-    $('genkaCard').classList.remove('hidden'); $('genkaImgBox').classList.add('hidden');
+    $('genkaCard').classList.remove('hidden'); $('genkaImgBox').classList.add('hidden'); $('genkaSent').classList.add('hidden');
     $('genkaMonths').innerHTML = [prevYm(base), base].map((x) =>
       '<button type="button" class="chip' + (x === G.ym ? ' on' : '') + '" data-ym="' + x + '">' + Number(x.slice(5)) + '月</button>').join('');
     const o = $('store').selectedOptions[0];
     $('genkaTitle').textContent = (o ? o.textContent + '　' : '') + Number(G.ym.slice(5)) + '月の原価表';
     $('genkaBody').innerHTML = '<p class="note">読み込み中…</p>';
-    G.d = null; G.file = null; setGenkaBtns(false);
+    G.d = null; G.file = null; G.s = STORE; setGenkaBtns(false);
+    $('genkaTo').textContent = '';
     window.scrollTo(0, 0);
     const want = G.ym, st = STORE;
     try {
@@ -1013,6 +1016,7 @@
       if (want !== G.ym || st !== STORE || $('genkaCard').classList.contains('hidden')) return;  // 別の月・店舗に切り替えたあと
       G.d = d;
       $('genkaTitle').textContent = d.store + '　' + d.y + '年' + d.m + '月　原価表';
+      $('genkaTo').textContent = d.mailTo ? '宛先：' + d.mailTo : '送り先が設定されていません';
       $('genkaBody').innerHTML = genkaHtml(d);
       setGenkaBtns(true);
       genkaImage(d).then((f) => { if (G.d === d) G.file = f; }).catch(() => {});  // 送るときすぐ共有できるよう先に画像を作っておく
@@ -1092,6 +1096,34 @@
       '<img src="' + u + '" alt="原価表" style="width:100%;border:1px solid var(--line);border-radius:8px">';
     $('genkaImgBox').classList.remove('hidden');
   }
+  // 決まった宛先へ、原価表の画像をメールで送る（送るのはサーバー。宛先はサーバー側で決まっている）
+  const toB64 = (file) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result).split(',')[1] || '');
+    r.onerror = () => rej(new Error('画像を読み込めませんでした'));
+    r.readAsDataURL(file);
+  });
+  $('genkaSend').addEventListener('click', async () => {
+    const d = G.d;
+    if (!d || !d.mailTo) return;
+    if (!confirm(d.store + '　' + d.m + '月の原価表を\n' + d.mailTo + '\nに送信します。よろしいですか？')) return;
+    const btn = $('genkaSend'), box = $('genkaSent');
+    btn.disabled = true; btn.textContent = '送信中…'; box.classList.add('hidden');
+    try {
+      if (!G.file) G.file = await genkaImage(d);
+      const r = await api('genkaMail', { s: G.s, date: d.y + '-' + pad(d.m) + '-01', png: await toB64(G.file) });
+      if (G.d !== d) return;
+      box.className = 'msg ok'; box.style.marginTop = '8px';
+      box.innerHTML = '✓ 送信しました（' + esc(r.to) + '）';
+    } catch (e) {
+      if (G.d !== d) return;
+      box.className = 'msg err'; box.style.marginTop = '8px';
+      box.innerHTML = '送信できませんでした：' + esc(errText(e)) + '<br>下の「共有から送る」もお試しください。';
+    } finally {
+      btn.textContent = '📧 メールで送信';
+      btn.disabled = !G.d;
+    }
+  });
   $('genkaShare').addEventListener('click', async () => {
     if (!G.d) return;
     if (!G.file) { try { G.file = await genkaImage(G.d); } catch (e) { showMsg(esc(errText(e)), 'err'); return; } }
