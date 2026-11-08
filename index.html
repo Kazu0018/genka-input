@@ -93,6 +93,17 @@
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .chip { min-height: 40px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--ink); font-size: 16px; font-weight: 700; }
   .chip.on { border-color: var(--acc); background: #fbf1ec; color: var(--acc); }
+  /* 原価表タブ（メールで送る用） */
+  .gscroll { overflow-x: auto; }
+  .gtab { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .gtab th, .gtab td { border: 1px solid var(--line); padding: 5px 2px; text-align: right; white-space: nowrap; }
+  .gtab th:first-child, .gtab td:first-child { text-align: left; white-space: normal; min-width: 5.6em; line-height: 1.3; }
+  .gtab thead th { background: #f3efe8; font-size: 10px; letter-spacing: -.02em; }
+  .gtab tr.tot td { font-weight: 700; background: #faf7f2; }
+  .gtab td.over { color: var(--err); font-weight: 800; }
+  .gtab td.under { color: var(--ok); font-weight: 800; }
+  .gnotes { margin-top: 8px; font-size: 12px; color: var(--sub); line-height: 1.5; }
+  #genkaTop { margin: 0 0 10px; }
   .p8row { align-items: center; }
   .p8info { font-size: 15px; font-weight: 700; color: var(--acc); }
   .calc { font-size: 15px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); }
@@ -141,6 +152,7 @@
   <section id="form" class="card hidden">
     <input id="file" type="file" accept="image/*" capture="environment" class="hidden">
     <input id="fileLib" type="file" accept="image/*" class="hidden">
+    <button type="button" id="genkaTop" class="linkbtn hidden">📊 今日は原価表をメールで送る日です（ここを押す）</button>
     <div class="row">
       <button id="camBtn" class="btn primary cam" disabled>📷 撮影する</button>
       <button id="libBtn" class="btn cam" disabled>🖼 写真から選ぶ</button>
@@ -178,6 +190,8 @@
     <button id="saveBtn" class="btn primary" style="margin-top:14px" disabled>原価表に入力</button>
     <p class="note">数式の入ったセルには書き込みません。読み取り結果は必ず伝票と見比べてから入力してください。</p>
     <button type="button" id="clrBtn" class="linkbtn clr hidden"></button>
+    <button type="button" id="genkaBtn" class="btn" style="margin-top:16px">📊 原価表を見る・メールで送る</button>
+    <p class="note" style="text-align:center">毎月11日・21日・月末に送る原価表（「原価表」タブ）</p>
   </section>
 
   <section id="done" class="card done hidden">
@@ -188,6 +202,17 @@
       <button id="nextBtn" class="btn primary">次の伝票</button>
     </div>
     <p class="note"><a id="sheetLink" class="link" target="_blank" rel="noopener">原価表を開く</a></p>
+  </section>
+
+  <section id="genkaCard" class="card hidden">
+    <h2 id="genkaTitle" style="margin-top:0">原価表</h2>
+    <div id="genkaMonths" class="chips" style="margin:0 0 10px"></div>
+    <div id="genkaBody"></div>
+    <button type="button" id="genkaShare" class="btn primary" style="margin-top:12px" disabled>📤 画像でメールを送る</button>
+    <p class="note" style="margin-top:4px">押すと共有の画面が出ます。「メール」を選んで送ってください。</p>
+    <div id="genkaImgBox" class="hidden" style="margin-top:8px"></div>
+    <button type="button" id="genkaMail" class="btn" style="margin-top:8px" disabled>✉ 文字でメールを作る</button>
+    <button type="button" id="genkaClose" class="btn" style="margin-top:8px">閉じる</button>
   </section>
 </main>
 
@@ -388,6 +413,7 @@
   function storeLabel() { const o = $('store').selectedOptions[0]; return o ? o.textContent : ''; }
   function saveLabel() { const n = storeLabel(); return n ? n + 'の原価表に入力' : '原価表に入力'; }
   function applyStoreLook() {
+    updateGenkaHint();
     const c = STORE_COLORS[STORE] || '';
     document.querySelector('header').style.background = c;
     $('saveBtn').style.background = c; $('saveBtn').style.borderColor = c;
@@ -799,6 +825,7 @@
   function showSetup(err) {
     $('setup').classList.remove('hidden');
     $('form').classList.add('hidden'); $('done').classList.add('hidden'); $('convertCard').classList.add('hidden');
+    $('genkaCard').classList.add('hidden'); G.back = null;
     $('fileName').textContent = '店舗のQRコードを読み取ってください';
     $('tokenInput').value = '';  // 保存しているパスワードは画面に出さない
     $('adminBox').classList.add('hidden');
@@ -826,7 +853,7 @@
       sel.value = STORE;
       sel.disabled = stores.length <= 1;
       LS.set('store', STORE);
-      $('setup').classList.add('hidden');
+      $('setup').classList.add('hidden'); $('genkaCard').classList.add('hidden'); G.back = null;
       $('form').classList.remove('hidden');
       showMsg('');
       applyStoreLook();
@@ -947,6 +974,153 @@
   $('gearBtn').addEventListener('click', () => {
     if ($('setup').classList.contains('hidden')) showSetup(); else start();
   });
+  // ===== 原価表タブを見る・メールで送る（毎月11日・21日・月末に送る） =====
+  const G = { d: null, file: null, ym: '', back: null };
+  function isSendDay() {
+    const d = new Date(), last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return d.getDate() === 11 || d.getDate() === 21 || d.getDate() === last;
+  }
+  function updateGenkaHint() {  // 送る日は目立たせる
+    const on = isSendDay();
+    $('genkaTop').classList.toggle('hidden', !on);
+    $('genkaBtn').classList.toggle('primary', on);
+  }
+  const prevYm = (ym) => { const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7)); return m === 1 ? (y - 1) + '-12' : y + '-' + pad(m - 1); };
+  const isTot = (l) => /合計|^\([ABC]\)/.test(l);
+  const isRate = (l) => /原価率/.test(l);
+  const rateLabel = (l) => l.replace(/^(\([A-Z]\))?\s*原価率.*$/, (a, p) => (p ? p + ' ' : '') + '原価率');
+  const rateCls = (v, t) => { const n = parseFloat(v); if (!t || isNaN(n)) return ''; return n > t ? 'over' : 'under'; };
+  const cellText = (r, i) => { const rate = isRate(r[0]); return i === 0 ? (rate ? rateLabel(r[0]) : r[0]) : (rate && r[i] !== '-' ? r[i] + '%' : r[i]); };
+  const genkaSubject = (d) => d.store + ' ' + d.y + '年' + d.m + '月 原価表（' + d.at + ' 時点）';
+  function setGenkaBtns(on) { $('genkaShare').disabled = !on; $('genkaMail').disabled = !on; }
+
+  async function openGenka(ym) {
+    if (!STORE) return;
+    const base = monthOf($('date').value) || monthOf(todayStr());
+    G.ym = ym || base;
+    if (!G.back) G.back = $('done').classList.contains('hidden') ? 'form' : 'done';
+    $('form').classList.add('hidden'); $('done').classList.add('hidden');
+    $('genkaCard').classList.remove('hidden'); $('genkaImgBox').classList.add('hidden');
+    $('genkaMonths').innerHTML = [prevYm(base), base].map((x) =>
+      '<button type="button" class="chip' + (x === G.ym ? ' on' : '') + '" data-ym="' + x + '">' + Number(x.slice(5)) + '月</button>').join('');
+    const o = $('store').selectedOptions[0];
+    $('genkaTitle').textContent = (o ? o.textContent + '　' : '') + Number(G.ym.slice(5)) + '月の原価表';
+    $('genkaBody').innerHTML = '<p class="note">読み込み中…</p>';
+    G.d = null; G.file = null; setGenkaBtns(false);
+    window.scrollTo(0, 0);
+    const want = G.ym, st = STORE;
+    try {
+      const d = await api('genka', { s: st, date: want + '-01' });
+      if (want !== G.ym || st !== STORE || $('genkaCard').classList.contains('hidden')) return;  // 別の月・店舗に切り替えたあと
+      G.d = d;
+      $('genkaTitle').textContent = d.store + '　' + d.y + '年' + d.m + '月　原価表';
+      $('genkaBody').innerHTML = genkaHtml(d);
+      setGenkaBtns(true);
+      genkaImage(d).then((f) => { if (G.d === d) G.file = f; }).catch(() => {});  // 送るときすぐ共有できるよう先に画像を作っておく
+    } catch (e) {
+      if (want !== G.ym || st !== STORE) return;
+      $('genkaBody').innerHTML = '<div class="msg err">原価表を読み込めませんでした：' + esc(errText(e)) + '</div>';
+    }
+  }
+
+  function genkaHtml(d) {
+    const h = '<tr>' + d.head.map((x) => '<th>' + esc(x) + '</th>').join('') + '</tr>';
+    const b = d.rows.map((r) => {
+      const rate = isRate(r[0]);
+      return '<tr class="' + (isTot(r[0]) ? 'tot' : '') + '">' +
+        r.map((x, i) => '<td class="' + (rate && i ? rateCls(x, d.target) : '') + '">' + esc(cellText(r, i)) + '</td>').join('') + '</tr>';
+    }).join('');
+    return '<div class="gscroll"><table class="gtab"><thead>' + h + '</thead><tbody>' + b + '</tbody></table></div>' +
+      '<div class="gnotes">' + esc(d.at) + ' 時点・単位：円（税込）' + d.notes.map((n) => '<br>' + esc(n)).join('') + '</div>';
+  }
+
+  /** メールに付ける画像（原価表タブと同じ並び） */
+  function genkaImage(d) {
+    const k = 2, P = 16, L = 250, C = 122, RH = 36, HH = 40;
+    const cols = [L].concat(d.head.slice(1).map(() => C));
+    const tw = cols.reduce((a, b) => a + b, 0), W = tw + P * 2;
+    const font = (w, s) => w + ' ' + s + 'px -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
+    const c = document.createElement('canvas'), x = c.getContext('2d');
+    x.font = font(400, 14);
+    const wrap = (t) => {
+      const out = []; let line = '';
+      for (const ch of t) { if (line && x.measureText(line + ch).width > tw) { out.push(line); line = ch; } else line += ch; }
+      if (line) out.push(line);
+      return out;
+    };
+    const notes = [d.at + ' 時点・単位：円（税込）'];
+    d.notes.forEach((n) => wrap(n).forEach((l) => notes.push(l)));
+    const H = P + 44 + HH + RH * d.rows.length + 12 + notes.length * 22 + P;
+    c.width = W * k; c.height = H * k; x.scale(k, k);
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+    x.textBaseline = 'middle';
+    let y = P;
+    x.textAlign = 'left'; x.fillStyle = '#1c1b19'; x.font = font(700, 24);
+    x.fillText(d.store + '　' + d.y + '年' + d.m + '月　原価表', P, y + 16, tw);
+    y += 44;
+    const cx = (i) => P + cols.slice(0, i).reduce((a, b) => a + b, 0);
+    const row = (cells, h, o) => {
+      if (o.bg) { x.fillStyle = o.bg; x.fillRect(P, y, tw, h); }
+      cells.forEach((t, i) => {
+        x.font = font(o.bold ? 700 : 400, o.size || 17);
+        x.fillStyle = (o.color && o.color(i)) || '#1c1b19';
+        if (i === 0) { x.textAlign = 'left'; x.fillText(t, cx(0) + 8, y + h / 2, L - 14); }
+        else { x.textAlign = 'right'; x.fillText(t, cx(i) + C - 8, y + h / 2, C - 14); }
+      });
+      x.strokeStyle = '#cfc8bc'; x.lineWidth = 1;
+      x.strokeRect(P + 0.5, y + 0.5, tw - 1, h);
+      for (let i = 1; i < cols.length; i++) { x.beginPath(); x.moveTo(cx(i) + 0.5, y); x.lineTo(cx(i) + 0.5, y + h); x.stroke(); }
+      y += h;
+    };
+    row(d.head, HH, { bg: '#efe9df', bold: true, size: 15 });
+    d.rows.forEach((r) => {
+      const rate = isRate(r[0]);
+      row(r.map((v, i) => cellText(r, i)), RH, {
+        bg: isTot(r[0]) ? '#f7f2ea' : '', bold: isTot(r[0]),
+        color: rate ? (i) => { const k2 = i ? rateCls(r[i], d.target) : ''; return k2 === 'over' ? '#b3261e' : k2 === 'under' ? '#1f7a44' : ''; } : null,
+      });
+    });
+    y += 12;
+    x.textAlign = 'left'; x.font = font(400, 14); x.fillStyle = '#6d6a64';
+    notes.forEach((t) => { x.fillText(t, P, y + 11); y += 22; });
+    const name = 'genka_' + STORE + '_' + d.y + '-' + pad(d.m) + '.png';
+    return new Promise((res, rej) => c.toBlob((b) => b ? res(new File([b], name, { type: 'image/png' })) : rej(new Error('画像を作れませんでした')), 'image/png'));
+  }
+
+  function showGenkaImg() {  // 共有の画面が出せない端末：画像を出して、長押しで保存・共有してもらう
+    const u = URL.createObjectURL(G.file);
+    $('genkaImgBox').innerHTML = '<p class="note">画像を長押しして「共有」→「メール」、または「写真に保存」してください。</p>' +
+      '<img src="' + u + '" alt="原価表" style="width:100%;border:1px solid var(--line);border-radius:8px">';
+    $('genkaImgBox').classList.remove('hidden');
+  }
+  $('genkaShare').addEventListener('click', async () => {
+    if (!G.d) return;
+    if (!G.file) { try { G.file = await genkaImage(G.d); } catch (e) { showMsg(esc(errText(e)), 'err'); return; } }
+    const subj = genkaSubject(G.d);
+    if (navigator.canShare && navigator.canShare({ files: [G.file] })) {
+      try { await navigator.share({ files: [G.file], title: subj, text: subj }); }
+      catch (e) { if (!e || e.name !== 'AbortError') showGenkaImg(); }
+    } else showGenkaImg();
+  });
+  $('genkaMail').addEventListener('click', () => {
+    if (!G.d) return;
+    const d = G.d;
+    const lines = [genkaSubject(d), '単位：円（税込）', '', d.head.join(' ／ ')]
+      .concat(d.rows.map((r) => cellText(r, 0) + '：' + r.slice(1).map((v, i) => cellText(r, i + 1)).join(' ／ ')))
+      .concat([''], d.notes);
+    goMail('mailto:?subject=' + encodeURIComponent(genkaSubject(d)) + '&body=' + encodeURIComponent(lines.join('\n')));
+  });
+  function goMail(url) { location.href = url; }  // メールのアプリを開く
+  function closeGenka() {
+    $('genkaCard').classList.add('hidden'); $('genkaImgBox').classList.add('hidden');
+    $(G.back === 'done' ? 'done' : 'form').classList.remove('hidden');
+    G.back = null; G.d = null;
+  }
+  $('genkaClose').addEventListener('click', closeGenka);
+  $('genkaBtn').addEventListener('click', () => openGenka());
+  $('genkaTop').addEventListener('click', () => openGenka());
+  $('genkaMonths').addEventListener('click', (e) => { const b = e.target.closest('[data-ym]'); if (b) openGenka(b.dataset.ym); });
+
   $('store').addEventListener('change', () => {
     STORE = $('store').value; LS.set('store', STORE);
     if (!$('done').classList.contains('hidden')) next();
@@ -955,6 +1129,7 @@
     applyStoreLook();
     fillVendors([]);
     loadStatus();
+    if (!$('genkaCard').classList.contains('hidden')) openGenka(G.ym);
   });
 
   if ('serviceWorker' in navigator) {
