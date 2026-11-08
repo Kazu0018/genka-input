@@ -116,10 +116,21 @@
   <div id="msg" class="msg hidden"></div>
 
   <section id="setup" class="card hidden">
-    <h2>パスワードを入力</h2>
-    <p class="note" style="margin-top:0">管理者から聞いたパスワードを入れてください（ひらがな・カタカナどちらでもOK）。この端末に保存され、次回からは入力不要です。</p>
-    <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="パスワード">
-    <button id="tokenBtn" class="btn primary" style="margin-top:12px">保存して始める</button>
+    <h2>店舗のQRコードを読み取る</h2>
+    <p class="note" style="margin-top:0">使う店舗の原価表（「仕入れ」シートの右側・AE列あたり）にあるQRコードを読み取ってください。読み取ると、この端末はその店舗専用になります。次回からは読み取り不要です。</p>
+    <button id="qrBtn" type="button" class="btn primary">📷 QRコードを読み取る</button>
+    <div id="qrBox" class="hidden" style="margin-top:10px">
+      <video id="qrVideo" playsinline muted style="width:100%;border-radius:12px;background:#000"></video>
+      <p class="note" style="text-align:center">QRコードを画面の中に入れてください</p>
+      <button id="qrStop" type="button" class="btn">やめる</button>
+    </div>
+    <button id="qrPhoto" type="button" class="linkbtn">うまく読めないとき：QRコードを写真に撮って読み取る</button>
+    <input id="qrFile" type="file" accept="image/*" capture="environment" class="hidden">
+    <details style="margin-top:18px">
+      <summary class="note" style="cursor:pointer">管理者用（パスワードで全店舗）</summary>
+      <input id="tokenInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="パスワード" style="margin-top:8px">
+      <button id="tokenBtn" class="btn" style="margin-top:10px">保存して始める</button>
+    </details>
   </section>
 
   <div id="convertCard" class="card hidden">
@@ -189,6 +200,13 @@
   };
   let STORE = LS.get('store') || '';
   let TOKEN = LS.get('token') || '';
+  (function () {  // 店舗のQRコード（…/#k=鍵）から開いたとき：その店舗専用として保存する
+    const m = location.hash.match(/[#&]k=(q[0-9a-f]{32})/i);
+    if (!m) return;
+    TOKEN = m[1].toLowerCase(); LS.set('token', TOKEN);
+    STORE = ''; LS.del('store');
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  })();
   const $ = (id) => document.getElementById(id);
   const S = { status: null, items: [], sumMode: 'asis', last: null, current: null, busy: false, kind: 'buy', plus8: false };
   const pad = (n) => ('0' + n).slice(-2);
@@ -781,8 +799,8 @@
   function showSetup(err) {
     $('setup').classList.remove('hidden');
     $('form').classList.add('hidden'); $('done').classList.add('hidden'); $('convertCard').classList.add('hidden');
-    $('fileName').textContent = 'パスワードの入力が必要です';
-    $('tokenInput').value = TOKEN;
+    $('fileName').textContent = '店舗のQRコードを読み取ってください';
+    $('tokenInput').value = isQrKey(TOKEN) ? '' : TOKEN;
     if (err) showMsg(err, 'err');
   }
 
@@ -799,6 +817,10 @@
         o.value = x.code; o.textContent = x.name;
         sel.appendChild(o);
       });
+      if (STORE && stores.length === 1 && stores[0].code !== STORE) {
+        showSetup('この端末で使える店舗が変わりました。使う店舗の原価表（「仕入れ」シートの右側）にあるQRコードを読み取ってください。');
+        return;
+      }
       if (!stores.some((x) => x.code === STORE)) STORE = stores.length ? stores[0].code : '';
       sel.value = STORE;
       sel.disabled = stores.length <= 1;
@@ -815,6 +837,91 @@
       }
     }
   }
+
+  // ===== 店舗のQRコードを読み取る（読み取り部品 jsQR は、その時だけ読み込む） =====
+  const isQrKey = (t) => /^q[0-9a-f]{32}$/.test(String(t || ''));
+  let qrStream = null, qrTimer = null;
+  function loadJsQR() {
+    return new Promise((res, rej) => {
+      if (window.jsQR) return res(window.jsQR);
+      const s = document.createElement('script');
+      s.src = 'jsQR.min.js';
+      s.onload = () => res(window.jsQR);
+      s.onerror = () => rej(new Error('読み取りの部品を読み込めませんでした。電波の良い場所でもう一度お試しください。'));
+      document.head.appendChild(s);
+    });
+  }
+  /** 読み取ったQRの中身から鍵を取り出して、この端末をその店舗専用にする */
+  function useQrText(text) {
+    const m = String(text || '').match(/[#&?]k=(q[0-9a-f]{32})/i);
+    if (!m) { showMsg('このQRコードは入力アプリ用ではありません。原価表の右側（AE列あたり）にあるQRコードを読み取ってください。', 'err'); return false; }
+    stopQr();
+    TOKEN = m[1].toLowerCase(); LS.set('token', TOKEN);
+    STORE = ''; LS.del('store');
+    showMsg('');
+    start();
+    return true;
+  }
+  async function startQr() {
+    showMsg('');
+    let jsQR;
+    try { jsQR = await loadJsQR(); } catch (e) { showMsg(errText(e), 'err'); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $('qrFile').click(); return; }
+    try {
+      qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch (e) {
+      showMsg('カメラを使えませんでした。「写真に撮って読み取る」をお試しください。', 'err');
+      return;
+    }
+    const v = $('qrVideo');
+    v.srcObject = qrStream;
+    try { await v.play(); } catch (e) {}
+    $('qrBox').classList.remove('hidden'); $('qrBtn').classList.add('hidden');
+    const c = document.createElement('canvas');
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    qrTimer = setInterval(() => {
+      if (!v.videoWidth) return;
+      const w = Math.min(720, v.videoWidth), h = Math.round(v.videoHeight * w / v.videoWidth);
+      c.width = w; c.height = h;
+      ctx.drawImage(v, 0, 0, w, h);
+      const r = jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+      if (r && r.data) useQrText(r.data);
+    }, 250);
+  }
+  function stopQr() {
+    if (qrTimer) clearInterval(qrTimer);
+    qrTimer = null;
+    if (qrStream) qrStream.getTracks().forEach((t) => t.stop());
+    qrStream = null;
+    $('qrBox').classList.add('hidden'); $('qrBtn').classList.remove('hidden');
+  }
+  $('qrBtn').addEventListener('click', startQr);
+  $('qrStop').addEventListener('click', stopQr);
+  $('qrPhoto').addEventListener('click', () => { stopQr(); $('qrFile').click(); });
+  $('qrFile').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const jsQR = await loadJsQR();
+      const url = URL.createObjectURL(f);
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('写真を開けませんでした')); i.src = url; });
+      let found = null;
+      for (const max of [1200, 800, 1800]) {  // 大きさを変えて何回か試す
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
+        const r = jsQR(ctx.getImageData(0, 0, w, h).data, w, h);
+        if (r && r.data) { found = r.data; break; }
+      }
+      URL.revokeObjectURL(url);
+      if (!found) throw new Error('QRコードが見つかりませんでした。QRコードを大きく、まっすぐ撮ってください。');
+      useQrText(found);
+    } catch (err) {
+      showMsg('QRコードを読み取れませんでした：' + errText(err), 'err');
+    }
+  });
 
   $('tokenBtn').addEventListener('click', () => {
     const t = $('tokenInput').value.trim().toLowerCase();
